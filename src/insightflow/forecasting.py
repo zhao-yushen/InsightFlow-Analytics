@@ -123,7 +123,11 @@ def forecast_metric(
     for model in models:
         scores = _backtest(values, model, holdout)
         rows.append({"model": model, **scores})
-    leaderboard = pd.DataFrame(rows).sort_values(["wape", "smape", "rmse"], ascending=True).reset_index(drop=True)
+    leaderboard = (
+        pd.DataFrame(rows)
+        .sort_values(["wape", "smape", "rmse"], ascending=True)
+        .reset_index(drop=True)
+    )
     selected = str(leaderboard.iloc[0]["model"])
     predictions = _forecast_values(values, selected, horizon)
     residual_rmse = float(leaderboard.iloc[0]["rmse"])
@@ -133,12 +137,17 @@ def forecast_metric(
         {
             "month": future_months,
             "forecast": predictions,
-            "lower": [max(0.0, p - 1.96 * residual_rmse * np.sqrt(i)) for i, p in enumerate(predictions, 1)],
+            "lower": [
+                max(0.0, p - 1.96 * residual_rmse * np.sqrt(i))
+                for i, p in enumerate(predictions, 1)
+            ],
             "upper": [p + 1.96 * residual_rmse * np.sqrt(i) for i, p in enumerate(predictions, 1)],
         }
     )
     if metric in {"gross_margin", "contribution_margin", "discount_rate"}:
-        forecast[["forecast", "lower", "upper"]] = forecast[["forecast", "lower", "upper"]].clip(0, 1)
+        forecast[["forecast", "lower", "upper"]] = forecast[["forecast", "lower", "upper"]].clip(
+            0, 1
+        )
     return ForecastResult(metric, selected, leaderboard, history, forecast)
 
 

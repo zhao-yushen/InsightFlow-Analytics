@@ -1,14 +1,18 @@
 from __future__ import annotations
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from insightflow.config import DEFAULT_MULTITABLE_DB_PATH, DEFAULT_MULTITABLE_DIR, ensure_directories
+from insightflow.config import (
+    DEFAULT_MULTITABLE_DB_PATH,
+    DEFAULT_MULTITABLE_DIR,
+    ensure_directories,
+)
 from insightflow.etl import clean_transactions
 from insightflow.multitable import generate_multitable_demo, load_multitable_directory
 from insightflow.warehouse import build_warehouse

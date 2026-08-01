@@ -13,7 +13,14 @@ from insightflow.metrics import (
 from insightflow.warehouse import build_warehouse
 
 
-def _row(invoice: str, date: str, country: str, customer: str, category: str = "Electronics", channel: str = "Web"):
+def _row(
+    invoice: str,
+    date: str,
+    country: str,
+    customer: str,
+    category: str = "Electronics",
+    channel: str = "Web",
+):
     return {
         "invoice_no": invoice,
         "stock_code": f"SKU-{invoice}",
@@ -40,7 +47,9 @@ def _warehouse(tmp_path):
         ]
     )
     db = tmp_path / "filters.db"
-    build_warehouse(clean_transactions(frame, transaction_status="Verified"), db, load_mode="replace")
+    build_warehouse(
+        clean_transactions(frame, transaction_status="Verified"), db, load_mode="replace"
+    )
     return db
 
 

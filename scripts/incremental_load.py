@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -16,7 +16,9 @@ from insightflow.warehouse import build_warehouse
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Incrementally load transaction data into InsightFlow")
+    parser = argparse.ArgumentParser(
+        description="Incrementally load transaction data into InsightFlow"
+    )
     parser.add_argument("--input", required=True, help="CSV/XLSX/Parquet file")
     args = parser.parse_args()
     source = Path(args.input)

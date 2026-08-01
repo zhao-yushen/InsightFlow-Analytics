@@ -54,7 +54,9 @@ def test_zero_elasticity_override_is_respected(tmp_path: Path):
     assert result["units"] == pytest.approx(baseline["units"])
 
 
-def test_action_state_persists_across_diagnostic_refresh(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_action_state_persists_across_diagnostic_refresh(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     monkeypatch.setenv("INSIGHTFLOW_READ_ONLY", "false")
     db, filters = _db(tmp_path)
     actions = sync_action_register(db, filters, persist=True)
@@ -122,6 +124,8 @@ def test_fault_injection_surfaces_contract_failures():
             remove_month=False,
         ),
     )
-    result = clean_transactions(corrupted, source_profile="fault_test", transaction_status="Simulated")
+    result = clean_transactions(
+        corrupted, source_profile="fault_test", transaction_status="Simulated"
+    )
     assert len(corrupted) > len(source)
     assert (result.contract_issues["severity"] != "PASS").any()

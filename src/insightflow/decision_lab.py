@@ -44,7 +44,7 @@ def _weighted_elasticity(db_path: str | Path, filters: FilterSpec) -> float:
         db_path,
         f"""
         SELECT SUM(price_elasticity * net_revenue) / NULLIF(SUM(net_revenue),0) elasticity
-        FROM fact_transactions WHERE {' AND '.join(clauses)}
+        FROM fact_transactions WHERE {" AND ".join(clauses)}
         """,
         params,
     ).iloc[0, 0]
@@ -85,7 +85,9 @@ def simulate_scenario(
     projected_shipping = baseline["shipping_cost"] * demand_factor * (1 + shipping_change)
     projected_payment = baseline["payment_fee"] * (projected_revenue / max(baseline["revenue"], 1))
     projected_marketing = baseline["marketing_cost"] * (1 + marketing_change)
-    projected_cancellation_rate = float(np.clip(baseline["cancellation_rate"] + cancellation_change, 0, 0.30))
+    projected_cancellation_rate = float(
+        np.clip(baseline["cancellation_rate"] + cancellation_change, 0, 0.30)
+    )
     projected_return_loss = baseline["return_loss"] * (
         projected_cancellation_rate / max(baseline["cancellation_rate"], 0.005)
     )
@@ -107,7 +109,9 @@ def simulate_scenario(
         "gross_profit": projected_gross_profit,
         "gross_margin": projected_gross_profit / projected_revenue if projected_revenue else 0.0,
         "contribution_profit": projected_contribution,
-        "contribution_margin": projected_contribution / projected_revenue if projected_revenue else 0.0,
+        "contribution_margin": projected_contribution / projected_revenue
+        if projected_revenue
+        else 0.0,
         "contribution_profit_change": projected_contribution - baseline["contribution_profit"],
         "orders": projected_orders,
         "active_customers": projected_customers,
@@ -202,7 +206,9 @@ def monte_carlo_scenario(
     payment = baseline["payment_fee"] * revenue / max(baseline["revenue"], 1)
     marketing = baseline["marketing_cost"] * (1 + marketing_change)
     cancellation_rate = float(np.clip(baseline["cancellation_rate"] + cancellation_change, 0, 0.30))
-    return_loss = baseline["return_loss"] * cancellation_rate / max(baseline["cancellation_rate"], 0.005)
+    return_loss = (
+        baseline["return_loss"] * cancellation_rate / max(baseline["cancellation_rate"], 0.005)
+    )
     incremental_return = return_loss - baseline["return_loss"]
     contribution = revenue - cogs - shipping - payment - marketing - incremental_return
 
@@ -248,7 +254,8 @@ def monte_carlo_scenario(
         .corr(method="spearman")["contribution_profit_change"]
         .drop("contribution_profit_change")
         .rename("rank_correlation")
-        .reset_index().rename(columns={"index": "driver"})
+        .reset_index()
+        .rename(columns={"index": "driver"})
     )
     sensitivity["absolute_importance"] = sensitivity["rank_correlation"].abs()
     sensitivity = sensitivity.sort_values("absolute_importance", ascending=False)

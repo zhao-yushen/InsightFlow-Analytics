@@ -27,7 +27,11 @@ def inject_faults(df: pd.DataFrame, plan: FaultPlan | None = None) -> pd.DataFra
 
     def sample(rate: float) -> np.ndarray:
         count = min(n, max(0, int(round(n * rate))))
-        return rng.choice(out.index.to_numpy(), size=count, replace=False) if count else np.array([], dtype=int)
+        return (
+            rng.choice(out.index.to_numpy(), size=count, replace=False)
+            if count
+            else np.array([], dtype=int)
+        )
 
     missing = sample(plan.missing_customer_rate)
     if "customer_id" in out:

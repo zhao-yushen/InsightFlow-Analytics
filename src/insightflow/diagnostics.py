@@ -35,7 +35,9 @@ class DiagnosticIssue:
         return asdict(self)
 
 
-def revenue_driver_decomposition(current: dict[str, float], previous: dict[str, float]) -> pd.DataFrame:
+def revenue_driver_decomposition(
+    current: dict[str, float], previous: dict[str, float]
+) -> pd.DataFrame:
     """Exact Shapley decomposition of R = customers × frequency × AOV."""
     factor_names = ["active_customers", "purchase_frequency", "average_order_value"]
     labels = {
@@ -47,7 +49,9 @@ def revenue_driver_decomposition(current: dict[str, float], previous: dict[str, 
     new = {k: float(current.get(k, 0)) for k in factor_names}
 
     def revenue(state: dict[str, float]) -> float:
-        return state["active_customers"] * state["purchase_frequency"] * state["average_order_value"]
+        return (
+            state["active_customers"] * state["purchase_frequency"] * state["average_order_value"]
+        )
 
     contributions = {k: 0.0 for k in factor_names}
     perms = list(permutations(factor_names))
@@ -75,14 +79,20 @@ def revenue_driver_decomposition(current: dict[str, float], previous: dict[str, 
     ).sort_values("revenue_contribution")
 
 
-def profit_driver_decomposition(current: dict[str, float], previous: dict[str, float]) -> pd.DataFrame:
+def profit_driver_decomposition(
+    current: dict[str, float], previous: dict[str, float]
+) -> pd.DataFrame:
     """Exact bridge of contribution profit = revenue × gross margin - variable operating cost."""
     cur_revenue = float(current.get("revenue", 0))
     prev_revenue = float(previous.get("revenue", 0))
     cur_margin = float(current.get("gross_margin", 0))
     prev_margin = float(previous.get("gross_margin", 0))
-    cur_opex = sum(float(current.get(k, 0)) for k in ("shipping_cost", "payment_fee", "marketing_cost"))
-    prev_opex = sum(float(previous.get(k, 0)) for k in ("shipping_cost", "payment_fee", "marketing_cost"))
+    cur_opex = sum(
+        float(current.get(k, 0)) for k in ("shipping_cost", "payment_fee", "marketing_cost")
+    )
+    prev_opex = sum(
+        float(previous.get(k, 0)) for k in ("shipping_cost", "payment_fee", "marketing_cost")
+    )
     rows = [
         {
             "driver": "净销售额变化",
@@ -103,7 +113,9 @@ def profit_driver_decomposition(current: dict[str, float], previous: dict[str, f
     return pd.DataFrame(rows).sort_values("profit_contribution")
 
 
-def dimension_change(db_path: str | Path, current: FilterSpec, dimension: str, limit: int = 12) -> pd.DataFrame:
+def dimension_change(
+    db_path: str | Path, current: FilterSpec, dimension: str, limit: int = 12
+) -> pd.DataFrame:
     previous = previous_period(current)
     cur = dimension_performance(db_path, current, dimension, limit=1000).rename(
         columns={"revenue": "current_revenue", "contribution_profit": "current_profit"}
@@ -156,7 +168,9 @@ def generate_diagnostics(
         return issues, drivers
     comparison_sufficient = float(prev.get("orders", 0)) >= 5
 
-    revenue_change = percent_change(cur["revenue"], prev["revenue"]) if comparison_sufficient else None
+    revenue_change = (
+        percent_change(cur["revenue"], prev["revenue"]) if comparison_sufficient else None
+    )
     profit_change = (
         percent_change(cur["contribution_profit"], prev["contribution_profit"])
         if comparison_sufficient
@@ -210,16 +224,14 @@ def generate_diagnostics(
                 category="盈利能力",
                 title="毛利率低于经营警戒线",
                 finding=f"本期毛利率为 {cur['gross_margin']:.1%}。",
-                evidence=f"折扣率 {cur['discount_rate']:.1%}，商品成本占净销售额 {cur['cogs']/max(cur['revenue'],1):.1%}。",
+                evidence=f"折扣率 {cur['discount_rate']:.1%}，商品成本占净销售额 {cur['cogs'] / max(cur['revenue'], 1):.1%}。",
                 recommendation="筛查高收入低毛利商品，并模拟价格、折扣和采购成本调整方案。",
                 confidence=0.94,
             )
         )
 
     cancel_change = (
-        cur["cancellation_rate"] - prev["cancellation_rate"]
-        if comparison_sufficient
-        else 0.0
+        cur["cancellation_rate"] - prev["cancellation_rate"] if comparison_sufficient else 0.0
     )
     if cur["cancellation_rate"] >= 0.05 or cancel_change >= 0.015:
         issues.append(
@@ -291,7 +303,11 @@ def generate_diagnostics(
             )
         )
 
-    target = target_status(db_path, str(pd.Timestamp(current.end_date).to_period("M"))) if current.end_date else pd.DataFrame()
+    target = (
+        target_status(db_path, str(pd.Timestamp(current.end_date).to_period("M")))
+        if current.end_date
+        else pd.DataFrame()
+    )
     if not target.empty:
         off_track = target[target["status"] == "Off Track"]
         if not off_track.empty:

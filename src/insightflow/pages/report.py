@@ -3,11 +3,11 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from insightflow.i18n import lt, t
 from insightflow.ai_assistant import executive_summary
 from insightflow.config import DEFAULT_DB_PATH, is_read_only
 from insightflow.diagnostics import generate_diagnostics, profit_driver_decomposition
 from insightflow.forecasting import forecast_metric
+from insightflow.i18n import lt, t
 from insightflow.metrics import (
     inventory_status,
     kpi_summary,

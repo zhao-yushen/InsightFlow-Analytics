@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Iterable
+from collections.abc import Iterable
 
 from .diagnostics import DiagnosticIssue
 
@@ -21,7 +21,9 @@ def deterministic_executive_summary(issues: Iterable[DiagnosticIssue]) -> str:
     return "\n\n".join(lines)
 
 
-def openai_executive_summary(issues: Iterable[DiagnosticIssue], model: str | None = None) -> str | None:
+def openai_executive_summary(
+    issues: Iterable[DiagnosticIssue], model: str | None = None
+) -> str | None:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         return None

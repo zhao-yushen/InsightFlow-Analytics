@@ -7,7 +7,6 @@ import pandas as pd
 
 from .demo_data import DemoConfig, generate_demo_transactions
 
-
 TABLE_FILES = {
     "orders": "orders.csv",
     "order_items": "order_items.csv",
@@ -19,7 +18,9 @@ TABLE_FILES = {
 }
 
 
-def generate_multitable_demo(output_dir: str | Path, config: DemoConfig | None = None) -> dict[str, Path]:
+def generate_multitable_demo(
+    output_dir: str | Path, config: DemoConfig | None = None
+) -> dict[str, Path]:
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
     base = config or DemoConfig(n_customers=1600, n_products=100, base_daily_orders=18)
@@ -32,19 +33,19 @@ def generate_multitable_demo(output_dir: str | Path, config: DemoConfig | None =
         .groupby("customer_id", as_index=False)
         .agg(country=("country", "last"), acquisition_channel=("channel", "last"))
     )
-    customers["customer_segment"] = customers["customer_id"].astype(int).mod(4).map(
-        {0: "Value", 1: "Growth", 2: "Core", 3: "Occasional"}
+    customers["customer_segment"] = (
+        customers["customer_id"]
+        .astype(int)
+        .mod(4)
+        .map({0: "Value", 1: "Growth", 2: "Core", 3: "Occasional"})
     )
 
-    orders = (
-        transactions.groupby("invoice_no", as_index=False)
-        .agg(
-            customer_id=("customer_id", "last"),
-            order_date=("invoice_date", "min"),
-            country=("country", "last"),
-            channel=("channel", "last"),
-            order_status=("quantity", lambda x: "Cancelled" if (x < 0).any() else "Delivered"),
-        )
+    orders = transactions.groupby("invoice_no", as_index=False).agg(
+        customer_id=("customer_id", "last"),
+        order_date=("invoice_date", "min"),
+        country=("country", "last"),
+        channel=("channel", "last"),
+        order_status=("quantity", lambda x: "Cancelled" if (x < 0).any() else "Delivered"),
     )
     orders["campaign_id"] = orders["order_date"].astype(str).str[:7].str.replace("-", "")
 
@@ -62,14 +63,11 @@ def generate_multitable_demo(output_dir: str | Path, config: DemoConfig | None =
     items = transactions[item_columns].rename(columns={"invoice_no": "order_id"})
     orders = orders.rename(columns={"invoice_no": "order_id"})
 
-    products = (
-        transactions.groupby("stock_code", as_index=False)
-        .agg(
-            description=("description", "last"),
-            category=("category", "last"),
-            price_elasticity=("price_elasticity", "last"),
-            supplier=("supplier", "last"),
-        )
+    products = transactions.groupby("stock_code", as_index=False).agg(
+        description=("description", "last"),
+        category=("category", "last"),
+        price_elasticity=("price_elasticity", "last"),
+        supplier=("supplier", "last"),
     )
     payments = (
         transactions.groupby("invoice_no", as_index=False)
@@ -78,17 +76,18 @@ def generate_multitable_demo(output_dir: str | Path, config: DemoConfig | None =
     )
     shipments = (
         transactions.groupby("invoice_no", as_index=False)
-        .agg(shipping_cost=("shipping_cost", "sum"), supplier_lead_days=("supplier_lead_days", "max"))
+        .agg(
+            shipping_cost=("shipping_cost", "sum"), supplier_lead_days=("supplier_lead_days", "max")
+        )
         .rename(columns={"invoice_no": "order_id"})
     )
-    shipments["delivery_days"] = (shipments["supplier_lead_days"].fillna(14) * 0.55).round().clip(1, 30)
-    inventory = (
-        transactions.groupby("stock_code", as_index=False)
-        .agg(
-            inventory_on_hand=("inventory_on_hand", "max"),
-            reorder_point=("reorder_point", "max"),
-            supplier_lead_days=("supplier_lead_days", "max"),
-        )
+    shipments["delivery_days"] = (
+        (shipments["supplier_lead_days"].fillna(14) * 0.55).round().clip(1, 30)
+    )
+    inventory = transactions.groupby("stock_code", as_index=False).agg(
+        inventory_on_hand=("inventory_on_hand", "max"),
+        reorder_point=("reorder_point", "max"),
+        supplier_lead_days=("supplier_lead_days", "max"),
     )
 
     frames = {
@@ -111,11 +110,29 @@ def generate_multitable_demo(output_dir: str | Path, config: DemoConfig | None =
 def load_multitable_directory(directory: str | Path) -> pd.DataFrame:
     root = Path(directory)
     tables = {name: pd.read_csv(root / filename) for name, filename in TABLE_FILES.items()}
-    merged = tables["order_items"].merge(tables["orders"], on="order_id", how="left", validate="many_to_one")
-    merged = merged.merge(tables["customers"], on="customer_id", how="left", validate="many_to_one", suffixes=("", "_customer"))
+    merged = tables["order_items"].merge(
+        tables["orders"], on="order_id", how="left", validate="many_to_one"
+    )
+    merged = merged.merge(
+        tables["customers"],
+        on="customer_id",
+        how="left",
+        validate="many_to_one",
+        suffixes=("", "_customer"),
+    )
     merged = merged.merge(tables["products"], on="stock_code", how="left", validate="many_to_one")
-    merged = merged.merge(tables["payments"][["order_id", "payment_fee"]], on="order_id", how="left", validate="many_to_one")
-    merged = merged.merge(tables["shipments"][["order_id", "shipping_cost"]], on="order_id", how="left", validate="many_to_one")
+    merged = merged.merge(
+        tables["payments"][["order_id", "payment_fee"]],
+        on="order_id",
+        how="left",
+        validate="many_to_one",
+    )
+    merged = merged.merge(
+        tables["shipments"][["order_id", "shipping_cost"]],
+        on="order_id",
+        how="left",
+        validate="many_to_one",
+    )
     merged = merged.merge(tables["inventory"], on="stock_code", how="left", validate="many_to_one")
     order_lines = merged.groupby("order_id")["order_item_id"].transform("count").clip(lower=1)
     merged["payment_fee"] = merged["payment_fee"] / order_lines
@@ -164,12 +181,16 @@ def load_olist_directory(directory: str | Path) -> pd.DataFrame:
     if translation_path.exists():
         translation = pd.read_csv(translation_path)
         products = products.merge(translation, on="product_category_name", how="left")
-        products["category"] = products["product_category_name_english"].fillna(products["product_category_name"])
+        products["category"] = products["product_category_name_english"].fillna(
+            products["product_category_name"]
+        )
     else:
         products["category"] = products["product_category_name"].fillna("Uncategorized")
     merged = items.merge(orders, on="order_id", how="left", validate="many_to_one")
     merged = merged.merge(customers, on="customer_id", how="left", validate="many_to_one")
-    merged = merged.merge(products[["product_id", "category"]], on="product_id", how="left", validate="many_to_one")
+    merged = merged.merge(
+        products[["product_id", "category"]], on="product_id", how="left", validate="many_to_one"
+    )
     cancelled = merged["order_status"].isin(["canceled", "unavailable"])
     quantity = pd.Series(1, index=merged.index).mask(cancelled, -1)
     return pd.DataFrame(

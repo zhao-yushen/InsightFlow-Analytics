@@ -4,9 +4,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from insightflow.i18n import lt, t
 from insightflow.config import DEFAULT_DB_PATH
 from insightflow.diagnostics import profit_driver_decomposition
+from insightflow.i18n import lt, t
 from insightflow.metrics import (
     cost_waterfall,
     kpi_summary,
@@ -28,15 +28,25 @@ def render() -> None:
 
     metrics = [
         (lt("净销售额"), current["revenue"], previous["revenue"], "£{:,.0f}"),
-        (lt("贡献利润"), current["contribution_profit"], previous["contribution_profit"], "£{:,.0f}"),
-        (lt("贡献利润率"), current["contribution_margin"], previous["contribution_margin"], "{:.1%}"),
+        (
+            lt("贡献利润"),
+            current["contribution_profit"],
+            previous["contribution_profit"],
+            "£{:,.0f}",
+        ),
+        (
+            lt("贡献利润率"),
+            current["contribution_margin"],
+            previous["contribution_margin"],
+            "{:.1%}",
+        ),
         (lt("毛利润"), current["gross_profit"], previous["gross_profit"], "£{:,.0f}"),
         (lt("毛利率"), current["gross_margin"], previous["gross_margin"], "{:.1%}"),
         (lt("单均利润"), current["profit_per_order"], previous["profit_per_order"], "£{:,.2f}"),
     ]
     for row_metrics in (metrics[:3], metrics[3:]):
         cols = st.columns(3)
-        for col, (label, value, prev, fmt) in zip(cols, row_metrics):
+        for col, (label, value, prev, fmt) in zip(cols, row_metrics, strict=False):
             delta = (value - prev) / abs(prev) if prev else None
             col.metric(label, fmt.format(value), "—" if delta is None else f"{delta:+.1%}")
 

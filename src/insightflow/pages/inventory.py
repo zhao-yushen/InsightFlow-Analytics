@@ -3,8 +3,8 @@ from __future__ import annotations
 import plotly.express as px
 import streamlit as st
 
-from insightflow.i18n import lt, t
 from insightflow.config import DEFAULT_DB_PATH
+from insightflow.i18n import lt, t
 from insightflow.metrics import inventory_kpis, inventory_status
 from insightflow.ui import page_header, sidebar_filters
 
@@ -42,8 +42,16 @@ def render() -> None:
 
     tabs = st.tabs([lt("补货预警"), lt("滞销风险"), lt("全部库存")])
     with tabs[0]:
-        st.dataframe(inventory_status(DEFAULT_DB_PATH, "Reorder").round(2), use_container_width=True, hide_index=True)
+        st.dataframe(
+            inventory_status(DEFAULT_DB_PATH, "Reorder").round(2),
+            use_container_width=True,
+            hide_index=True,
+        )
     with tabs[1]:
-        st.dataframe(inventory_status(DEFAULT_DB_PATH, "Overstock").round(2), use_container_width=True, hide_index=True)
+        st.dataframe(
+            inventory_status(DEFAULT_DB_PATH, "Overstock").round(2),
+            use_container_width=True,
+            hide_index=True,
+        )
     with tabs[2]:
         st.dataframe(data.round(2), use_container_width=True, hide_index=True)

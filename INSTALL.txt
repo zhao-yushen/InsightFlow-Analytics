@@ -1,0 +1,11 @@
+InsightFlow GitHub Actions Ruff fix
+
+1. Stop any running app.
+2. Copy this folder's CONTENTS into the repository root.
+3. Choose "Replace files in the destination".
+4. Run:
+   python -m ruff check src tests scripts streamlit_app.py --fix
+   python -m ruff format src tests scripts streamlit_app.py
+   python -m ruff check src tests scripts streamlit_app.py
+   python -m pytest --cov=src/insightflow --cov-report=term-missing --cov-fail-under=80 -q
+5. Commit and push.

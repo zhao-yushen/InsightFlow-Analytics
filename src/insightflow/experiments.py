@@ -39,7 +39,9 @@ def _fraction(value: str, salt: str) -> float:
 def seed_demo_experiments(db_path: str | Path) -> None:
     if not table_exists(db_path, "dim_customer"):
         return
-    customers = query_df(db_path, "SELECT customer_id FROM dim_customer WHERE customer_id IS NOT NULL")
+    customers = query_df(
+        db_path, "SELECT customer_id FROM dim_customer WHERE customer_id IS NOT NULL"
+    )
     if customers.empty:
         return
     customer_ids = customers["customer_id"].astype(str).tolist()
@@ -68,13 +70,25 @@ def seed_demo_experiments(db_path: str | Path) -> None:
     selected = customer_ids[:max_customers]
     for definition in definitions:
         for customer_id in selected:
-            assignment = "Treatment" if _fraction(customer_id, definition["experiment_id"] + "assign") >= 0.5 else "Control"
-            baseline_revenue = 18 + 170 * _fraction(customer_id, definition["experiment_id"] + "revenue")
-            baseline_margin = 0.12 + 0.18 * _fraction(customer_id, definition["experiment_id"] + "margin")
-            conversion_prob = 0.28 + 0.24 * _fraction(customer_id, definition["experiment_id"] + "conv")
+            assignment = (
+                "Treatment"
+                if _fraction(customer_id, definition["experiment_id"] + "assign") >= 0.5
+                else "Control"
+            )
+            baseline_revenue = 18 + 170 * _fraction(
+                customer_id, definition["experiment_id"] + "revenue"
+            )
+            baseline_margin = 0.12 + 0.18 * _fraction(
+                customer_id, definition["experiment_id"] + "margin"
+            )
+            conversion_prob = 0.28 + 0.24 * _fraction(
+                customer_id, definition["experiment_id"] + "conv"
+            )
             if assignment == "Treatment":
                 conversion_prob *= 1 + definition["treatment_conversion_lift"]
-            converted = _fraction(customer_id, definition["experiment_id"] + "outcome") < min(conversion_prob, 0.95)
+            converted = _fraction(customer_id, definition["experiment_id"] + "outcome") < min(
+                conversion_prob, 0.95
+            )
             revenue = baseline_revenue if converted else 0.0
             profit = revenue * baseline_margin
             return_prob = 0.035
@@ -101,7 +115,9 @@ def seed_demo_experiments(db_path: str | Path) -> None:
             )
     with connect(db_path) as conn:
         pd.DataFrame(rows).to_sql("experiment_assignments", conn, if_exists="replace", index=False)
-        pd.DataFrame(definitions).to_sql("experiment_catalog", conn, if_exists="replace", index=False)
+        pd.DataFrame(definitions).to_sql(
+            "experiment_catalog", conn, if_exists="replace", index=False
+        )
 
 
 def experiment_catalog(db_path: str | Path) -> pd.DataFrame:
@@ -112,7 +128,9 @@ def experiment_catalog(db_path: str | Path) -> pd.DataFrame:
     return query_df(db_path, "SELECT * FROM experiment_catalog")
 
 
-def _bootstrap_difference(control: np.ndarray, treatment: np.ndarray, seed: int = 42) -> tuple[float, float, float]:
+def _bootstrap_difference(
+    control: np.ndarray, treatment: np.ndarray, seed: int = 42
+) -> tuple[float, float, float]:
     if len(control) == 0 or len(treatment) == 0:
         return 0.0, 0.0, 0.0
     rng = np.random.default_rng(seed)
@@ -120,10 +138,16 @@ def _bootstrap_difference(control: np.ndarray, treatment: np.ndarray, seed: int 
     control_idx = rng.integers(0, len(control), size=(n_boot, len(control)))
     treatment_idx = rng.integers(0, len(treatment), size=(n_boot, len(treatment)))
     diffs = treatment[treatment_idx].mean(axis=1) - control[control_idx].mean(axis=1)
-    return float(np.quantile(diffs, 0.025)), float(np.quantile(diffs, 0.975)), float((diffs > 0).mean())
+    return (
+        float(np.quantile(diffs, 0.025)),
+        float(np.quantile(diffs, 0.975)),
+        float((diffs > 0).mean()),
+    )
 
 
-def analyze_experiment(db_path: str | Path, experiment_id: str) -> tuple[ExperimentSummary, pd.DataFrame, pd.DataFrame]:
+def analyze_experiment(
+    db_path: str | Path, experiment_id: str
+) -> tuple[ExperimentSummary, pd.DataFrame, pd.DataFrame]:
     data = query_df(
         db_path,
         "SELECT * FROM experiment_assignments WHERE experiment_id=?",
@@ -133,7 +157,6 @@ def analyze_experiment(db_path: str | Path, experiment_id: str) -> tuple[Experim
         raise ValueError(f"未找到实验 {experiment_id}")
     metrics = []
     for metric in ("converted", "net_revenue", "contribution_profit", "returned"):
-        group = data.groupby("assignment")[metric].agg(["mean", "sum", "count"]).reset_index()
         control = data.loc[data["assignment"] == "Control", metric].to_numpy(float)
         treatment = data.loc[data["assignment"] == "Treatment", metric].to_numpy(float)
         low, high, probability = _bootstrap_difference(control, treatment, seed=stable_seed(metric))
@@ -145,7 +168,9 @@ def analyze_experiment(db_path: str | Path, experiment_id: str) -> tuple[Experim
                 "control_mean": control_mean,
                 "treatment_mean": treatment_mean,
                 "absolute_lift": treatment_mean - control_mean,
-                "relative_lift": (treatment_mean - control_mean) / abs(control_mean) if control_mean else np.nan,
+                "relative_lift": (treatment_mean - control_mean) / abs(control_mean)
+                if control_mean
+                else np.nan,
                 "ci_low": low,
                 "ci_high": high,
                 "probability_positive": probability,
@@ -178,8 +203,9 @@ def analyze_experiment(db_path: str | Path, experiment_id: str) -> tuple[Experim
         decision=decision,
         guardrail_status="通过" if guardrail_ok else "未通过",
     )
-    balance = (
-        data.groupby("assignment", as_index=False)
-        .agg(customers=("customer_id", "nunique"), conversion_rate=("converted", "mean"), return_rate=("returned", "mean"))
+    balance = data.groupby("assignment", as_index=False).agg(
+        customers=("customer_id", "nunique"),
+        conversion_rate=("converted", "mean"),
+        return_rate=("returned", "mean"),
     )
     return summary, metric_table, balance

@@ -3,8 +3,8 @@ from __future__ import annotations
 import plotly.express as px
 import streamlit as st
 
-from insightflow.i18n import lt, t
 from insightflow.config import DEFAULT_DB_PATH
+from insightflow.i18n import lt, t
 from insightflow.metrics import cohort_retention, customer_value_risk, rfm_segments
 from insightflow.ui import page_header, sidebar_filters
 
@@ -67,7 +67,9 @@ def render() -> None:
                 "expected_profit_at_risk",
                 "recommended_action",
             ]
-        ].head(100).round(3),
+        ]
+        .head(100)
+        .round(3),
         use_container_width=True,
         hide_index=True,
     )

@@ -8,9 +8,11 @@ import pandas as pd
 
 from .geography import (
     COUNTRIES,
-    COUNTRY_WEIGHTS as COUNTRY_WEIGHT_VALUES,
     market_region,
     shipping_multiplier,
+)
+from .geography import (
+    COUNTRY_WEIGHTS as COUNTRY_WEIGHT_VALUES,
 )
 
 
@@ -72,7 +74,6 @@ COUNTRY_WEIGHTS /= COUNTRY_WEIGHTS.sum()
 CHANNELS = ["Web", "Marketplace", "Wholesale", "Mobile App", "Retail Store", "Social Commerce"]
 CHANNEL_WEIGHTS = np.array([0.43, 0.19, 0.10, 0.16, 0.08, 0.04], dtype=float)
 CHANNEL_WEIGHTS /= CHANNEL_WEIGHTS.sum()
-
 
 
 def _product_catalog(rng: np.random.Generator, n_products: int) -> pd.DataFrame:
@@ -156,7 +157,9 @@ def generate_demo_transactions(config: DemoConfig | None = None) -> pd.DataFrame
         if date >= pd.Timestamp("2025-12-01"):
             seasonal *= 0.87
 
-        n_orders = max(config.min_daily_orders, int(rng.poisson(config.base_daily_orders * seasonal)))
+        n_orders = max(
+            config.min_daily_orders, int(rng.poisson(config.base_daily_orders * seasonal))
+        )
         for _ in range(n_orders):
             invoice_counter += 1
             country = str(rng.choice(COUNTRIES, p=COUNTRY_WEIGHTS))
@@ -205,7 +208,9 @@ def generate_demo_transactions(config: DemoConfig | None = None) -> pd.DataFrame
                     "Retail Store": 0.45,
                     "Social Commerce": 1.12,
                 }[channel]
-                shipping_cost = round((1.15 + 0.16 * quantity) * country_shipping * channel_shipping, 2)
+                shipping_cost = round(
+                    (1.15 + 0.16 * quantity) * country_shipping * channel_shipping, 2
+                )
                 payment_fee_rate = {
                     "Web": 0.018,
                     "Marketplace": 0.026,

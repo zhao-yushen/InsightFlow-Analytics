@@ -61,7 +61,9 @@ def _detected_actions(db_path: str | Path, filters: FilterSpec) -> pd.DataFrame:
     }
     today = date.today()
     for issue in issues:
-        owner = next((value for key, value in owner_map.items() if key in issue.title), "Business Analytics")
+        owner = next(
+            (value for key, value in owner_map.items() if key in issue.title), "Business Analytics"
+        )
         due_days = 3 if issue.severity in {"P0", "P1"} else 10
         fingerprint = _fingerprint("diagnostic_engine", issue.title, issue.evidence)
         rows.append(
@@ -112,7 +114,9 @@ def _detected_actions(db_path: str | Path, filters: FilterSpec) -> pd.DataFrame:
     if not reorder.empty:
         for _, row in reorder.head(5).iterrows():
             issue = f"补货风险：{row['stock_code']}"
-            evidence = f"可售{row['days_of_supply']:.1f}天，供应提前期{row['supplier_lead_days']:.0f}天"
+            evidence = (
+                f"可售{row['days_of_supply']:.1f}天，供应提前期{row['supplier_lead_days']:.0f}天"
+            )
             fingerprint = _fingerprint("inventory_monitor", row["stock_code"])
             rows.append(
                 {
@@ -167,8 +171,14 @@ def sync_action_register(
                     WHERE issue_fingerprint=?
                     """,
                     (
-                        row["severity"], row["issue"], row["evidence"], row["recommended_action"],
-                        float(row["confidence"]), row["source"], now, row["issue_fingerprint"],
+                        row["severity"],
+                        row["issue"],
+                        row["evidence"],
+                        row["recommended_action"],
+                        float(row["confidence"]),
+                        row["source"],
+                        now,
+                        row["issue_fingerprint"],
                     ),
                 )
             else:
@@ -181,9 +191,19 @@ def sync_action_register(
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
                     """,
                     (
-                        row["action_id"], row["issue_fingerprint"], row["severity"], row["issue"],
-                        row["evidence"], row["recommended_action"], row["owner"], row["due_date"],
-                        row["status"], float(row["confidence"]), row["source"], now, now,
+                        row["action_id"],
+                        row["issue_fingerprint"],
+                        row["severity"],
+                        row["issue"],
+                        row["evidence"],
+                        row["recommended_action"],
+                        row["owner"],
+                        row["due_date"],
+                        row["status"],
+                        float(row["confidence"]),
+                        row["source"],
+                        now,
+                        now,
                         row["resolution_note"],
                     ),
                 )

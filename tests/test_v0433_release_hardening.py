@@ -6,9 +6,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+import insightflow.watcher as watcher
 from insightflow.etl import clean_transactions, load_source, read_excel_transactions
 from insightflow.warehouse import connect
-import insightflow.watcher as watcher
 
 
 def _valid_rows() -> pd.DataFrame:

@@ -13,6 +13,7 @@ from .config import CACHE_TTL_SECONDS, DEFAULT_DB_PATH, is_read_only
 from .demo_data import write_demo_csv
 from .etl import clean_transactions, load_source
 from .geography import country_label, region_label
+from .i18n import LANGUAGES, current_language, language_name, t
 from .metrics import (
     FilterSpec,
     available_filters,
@@ -22,9 +23,7 @@ from .metrics import (
     filter_option_counts,
 )
 from .provenance import dataset_profile, trust_label
-from .i18n import LANGUAGES, current_language, language_name, t
 from .warehouse import build_warehouse, database_version, table_exists
-
 
 PALETTE = {
     "ink": "#111827",
@@ -476,7 +475,9 @@ def render_app_brand() -> str:
         key="insightflow_language",
     )
     if language not in {"zh-CN", "en"}:
-        st.sidebar.caption("Beta: navigation is localized; analytical narratives use English fallback.")
+        st.sidebar.caption(
+            "Beta: navigation is localized; analytical narratives use English fallback."
+        )
     return str(language)
 
 
@@ -545,7 +546,15 @@ def sidebar_filters(db_path: Path = DEFAULT_DB_PATH) -> FilterSpec:
     selected_countries = tuple(st.session_state.get("filter_countries", []))
 
     category_counts = _cached_dimension_counts(
-        db_key, db_version, start_iso, end_iso, selected_regions, selected_countries, (), (), "category"
+        db_key,
+        db_version,
+        start_iso,
+        end_iso,
+        selected_regions,
+        selected_countries,
+        (),
+        (),
+        "category",
     )
     categories_options = list(category_counts)
     _sanitize_filter_state("filter_categories", categories_options)
@@ -603,13 +612,17 @@ def sidebar_filters(db_path: Path = DEFAULT_DB_PATH) -> FilterSpec:
             t("filters.region"),
             regions_options,
             key="filter_regions",
-            format_func=lambda value: f"{region_label(value, current_language())} · {region_counts.get(value, 0):,}",
+            format_func=lambda value: (
+                f"{region_label(value, current_language())} · {region_counts.get(value, 0):,}"
+            ),
         )
         countries = st.multiselect(
             t("filters.country"),
             countries_options,
             key="filter_countries",
-            format_func=lambda value: f"{country_label(value, current_language())} · {country_counts.get(value, 0):,}",
+            format_func=lambda value: (
+                f"{country_label(value, current_language())} · {country_counts.get(value, 0):,}"
+            ),
         )
         categories = st.multiselect(
             t("filters.category"),

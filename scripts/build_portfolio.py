@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 import json
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -24,11 +24,19 @@ def main() -> None:
     kpi = kpi_summary(DEFAULT_DB_PATH, filters)
     profile = dataset_profile(DEFAULT_DB_PATH)
     experiment, _, _ = analyze_experiment(DEFAULT_DB_PATH, "EXP_BLANKET_DISCOUNT_01")
-    fact_rows = int(query_df(DEFAULT_DB_PATH, "SELECT COUNT(*) n FROM fact_transactions").iloc[0, 0])
+    fact_rows = int(
+        query_df(DEFAULT_DB_PATH, "SELECT COUNT(*) n FROM fact_transactions").iloc[0, 0]
+    )
     benchmark_path = ROOT / "reports" / "performance_benchmark.json"
-    benchmark = json.loads(benchmark_path.read_text(encoding="utf-8")) if benchmark_path.exists() else {}
+    benchmark = (
+        json.loads(benchmark_path.read_text(encoding="utf-8")) if benchmark_path.exists() else {}
+    )
     query_seconds = next(
-        (row["seconds"] for row in benchmark.get("benchmarks", []) if row["operation"] == "kpi_summary"),
+        (
+            row["seconds"]
+            for row in benchmark.get("benchmarks", [])
+            if row["operation"] == "kpi_summary"
+        ),
         None,
     )
     html = f"""<!doctype html>
@@ -47,12 +55,12 @@ h1{{font-size:44px;margin:0 0 12px}}.lead{{font-size:19px;line-height:1.7;max-wi
 <a class='btn' href='ui_preview_v0.4.2.html'>查看新版界面</a><a class='btn secondary' href='../reports/insightflow_business_report.html'>查看经营报告</a><a class='btn secondary' href='../docs/case_studies/profit_decline_case.md'>查看案例说明</a></section><section class='preview'><img src='ui_preview_v0.4.2.png' alt='InsightFlow v0.4.3.3 Executive UI'></section>
 <section class='grid'>
 <div class='card'><div class='label'>交易明细</div><div class='value'>{fact_rows:,}</div></div>
-<div class='card'><div class='label'>近90日净销售额</div><div class='value'>£{kpi['revenue']:,.0f}</div></div>
-<div class='card'><div class='label'>近90日贡献利润</div><div class='value'>£{kpi['contribution_profit']:,.0f}</div></div>
+<div class='card'><div class='label'>近90日净销售额</div><div class='value'>£{kpi["revenue"]:,.0f}</div></div>
+<div class='card'><div class='label'>近90日贡献利润</div><div class='value'>£{kpi["contribution_profit"]:,.0f}</div></div>
 <div class='card'><div class='label'>数据质量</div><div class='value'>{quality_score(DEFAULT_DB_PATH):.1f}/100</div></div>
 </section>
 <h2>项目区别度</h2><section class='two'>
-<div class='card feature'><h3>不把估算值伪装成真实值</h3><p>当前配置为 <b>{profile['data_mode']}</b>。交易、成本和库存分别记录来源状态、置信度和说明，报告中持续展示可信边界。</p></div>
+<div class='card feature'><h3>不把估算值伪装成真实值</h3><p>当前配置为 <b>{profile["data_mode"]}</b>。交易、成本和库存分别记录来源状态、置信度和说明，报告中持续展示可信边界。</p></div>
 <div class='card feature'><h3>不只做点预测</h3><p>情景模拟输出利润改善概率、90%区间、增收但减利概率和参数敏感性，避免把假设结果描述成确定结论。</p></div>
 <div class='card feature'><h3>不只看转化和收入</h3><p>模拟九折实验的单客利润提升为 <b class='result-warn'>£{experiment.lift:,.2f}</b>，系统结论为“{experiment.decision}”。</p></div>
 <div class='card feature'><h3>不让问题停留在图表</h3><p>系统将异常、目标和库存风险转成负责人、证据、截止日期和可下载行动清单。</p></div>
@@ -63,7 +71,7 @@ h1{{font-size:44px;margin:0 0 12px}}.lead{{font-size:19px;line-height:1.7;max-wi
 </section>
 <h2>工程验证</h2><section class='grid'>
 <div class='card'><div class='label'>自动化测试</div><div class='value result-good'>33 passed</div></div>
-<div class='card'><div class='label'>典型KPI查询</div><div class='value'>{query_seconds if query_seconds is not None else '—'}s</div></div>
+<div class='card'><div class='label'>典型KPI查询</div><div class='value'>{query_seconds if query_seconds is not None else "—"}s</div></div>
 <div class='card'><div class='label'>A/B实验样本</div><div class='value'>{experiment.sample_size:,}</div></div>
 <div class='card'><div class='label'>实验利润改善概率</div><div class='value'>{experiment.probability_positive:.1%}</div></div>
 </section>

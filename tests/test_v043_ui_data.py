@@ -4,7 +4,10 @@ import numpy as np
 import pandas as pd
 
 from insightflow.action_center import prepare_action_editor_frame
-from insightflow.demo_data import CATEGORIES, CHANNELS, CHANNEL_WEIGHTS, COUNTRIES, COUNTRY_WEIGHTS
+from insightflow.demo_data import CATEGORIES, CHANNEL_WEIGHTS, CHANNELS, COUNTRIES, COUNTRY_WEIGHTS
+from insightflow.etl import clean_transactions
+from insightflow.metrics import available_filters
+from insightflow.warehouse import build_warehouse
 
 
 def test_action_editor_frame_uses_compatible_dtypes() -> None:
@@ -31,10 +34,6 @@ def test_demo_dimensions_are_broad_and_weights_reconcile() -> None:
     assert len(CHANNELS) >= 5
     assert np.isclose(COUNTRY_WEIGHTS.sum(), 1.0)
     assert np.isclose(CHANNEL_WEIGHTS.sum(), 1.0)
-
-from insightflow.etl import clean_transactions
-from insightflow.metrics import available_filters
-from insightflow.warehouse import build_warehouse
 
 
 def test_new_dimension_values_are_discoverable_after_incremental_load(tmp_path) -> None:

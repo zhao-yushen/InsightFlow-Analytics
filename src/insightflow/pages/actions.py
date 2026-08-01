@@ -26,7 +26,9 @@ def render() -> None:
     )
     filters = sidebar_filters(DEFAULT_DB_PATH)
     read_only = is_read_only()
-    actions = sync_action_register(DEFAULT_DB_PATH, filters, persist=not read_only, include_inactive=True)
+    actions = sync_action_register(
+        DEFAULT_DB_PATH, filters, persist=not read_only, include_inactive=True
+    )
     if actions.empty:
         st.success(t("actions.none"))
         return
@@ -87,7 +89,9 @@ def render() -> None:
     status_to_display = {status: _status_label(status) for status in ACTION_STATUSES}
     display_to_status = {label: status for status, label in status_to_display.items()}
     if "status" in editor_frame:
-        editor_frame["status"] = editor_frame["status"].map(status_to_display).fillna(editor_frame["status"])
+        editor_frame["status"] = (
+            editor_frame["status"].map(status_to_display).fillna(editor_frame["status"])
+        )
     edited = st.data_editor(
         editor_frame,
         use_container_width=True,
@@ -139,7 +143,9 @@ def render() -> None:
         if st.button(t("actions.save"), type="primary", disabled=read_only):
             save_frame = pd.DataFrame(edited).copy()
             if "status" in save_frame:
-                save_frame["status"] = save_frame["status"].map(display_to_status).fillna(save_frame["status"])
+                save_frame["status"] = (
+                    save_frame["status"].map(display_to_status).fillna(save_frame["status"])
+                )
             count = update_action_register(DEFAULT_DB_PATH, save_frame)
             st.success(t("actions.saved", count=count))
             st.rerun()

@@ -63,13 +63,28 @@ def _classify(question: str) -> str:
         return "low_margin_products"
     if any(k in text for k in ("国家", "地区", "country", "region", "market")):
         return "country_driver"
-    if any(k in text for k in ("流失", "召回", "高价值客户", "churn", "win-back", "high-value customer")):
+    if any(
+        k in text
+        for k in ("流失", "召回", "高价值客户", "churn", "win-back", "high-value customer")
+    ):
         return "churn_risk"
     if any(k in text for k in ("库存", "补货", "缺货", "inventory", "reorder", "stockout")):
         return "inventory_risk"
     if any(k in text for k in ("目标", "完成率", "达成", "target", "goal", "off track")):
         return "target_risk"
-    if any(k in text for k in ("数据质量", "可信", "缺失", "重复", "data quality", "trust", "missing", "duplicate")):
+    if any(
+        k in text
+        for k in (
+            "数据质量",
+            "可信",
+            "缺失",
+            "重复",
+            "data quality",
+            "trust",
+            "missing",
+            "duplicate",
+        )
+    ):
         return "data_quality"
     return "profit_driver"
 
@@ -109,7 +124,9 @@ def answer_business_question(
     if intent == "low_margin_products":
         data = product_profitability(db_path, filters, limit=100)
         revenue_cut = data["revenue"].median() if not data.empty else 0
-        data = data[(data["revenue"] >= revenue_cut) & (data["contribution_margin"] < 0.12)].head(20)
+        data = data[(data["revenue"] >= revenue_cut) & (data["contribution_margin"] < 0.12)].head(
+            20
+        )
         answer = (
             f"Identified {len(data)} high-revenue products with contribution margins below 12%. "
             "Review discounts, procurement costs, and shipping costs before expanding volume."
@@ -138,7 +155,11 @@ def answer_business_question(
                 f"贡献利润变化约 £{top['profit_change']:,.0f}。"
             )
             if top is not None
-            else ("There is not enough data under the current filters." if english else "当前筛选条件下没有足够数据。")
+            else (
+                "There is not enough data under the current filters."
+                if english
+                else "当前筛选条件下没有足够数据。"
+            )
         )
         return QueryAnswer(
             "country_driver_v1",

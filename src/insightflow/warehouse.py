@@ -3,14 +3,13 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import closing, contextmanager
-from functools import lru_cache
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
 
 from .etl import ETLResult
-
 
 METRIC_CATALOG = [
     ("net_revenue", "净销售额", "有效销售毛额减折扣", "GBP", "fact_transactions", "每日"),
@@ -29,7 +28,14 @@ METRIC_CATALOG = [
     ("active_customers", "活跃客户", "期间内产生有效购买的客户去重数", "count", "v_sales", "每日"),
     ("repeat_rate", "复购率", "期间内订单数不少于2笔的客户占比", "%", "v_sales", "每日"),
     ("cancellation_rate", "取消率", "取消订单数/全部有效订单数", "%", "fact_transactions", "每日"),
-    ("inventory_days", "库存可售天数", "当前库存/近90日平均日销量", "days", "inventory_snapshot", "每日"),
+    (
+        "inventory_days",
+        "库存可售天数",
+        "当前库存/近90日平均日销量",
+        "days",
+        "inventory_snapshot",
+        "每日",
+    ),
 ]
 
 
@@ -97,7 +103,9 @@ def _load_fact(conn: sqlite3.Connection, curated: pd.DataFrame, load_mode: str) 
     curated.to_sql("incoming_transactions", conn, if_exists="replace", index=False)
     before = int(conn.execute("SELECT COUNT(*) FROM fact_transactions").fetchone()[0])
     columns = [row[1] for row in conn.execute("PRAGMA table_info(fact_transactions)").fetchall()]
-    incoming_columns = [row[1] for row in conn.execute("PRAGMA table_info(incoming_transactions)").fetchall()]
+    incoming_columns = [
+        row[1] for row in conn.execute("PRAGMA table_info(incoming_transactions)").fetchall()
+    ]
     if columns != incoming_columns:
         conn.execute("DROP TABLE incoming_transactions")
         raise ValueError("增量数据Schema与现有仓库不一致，请执行全量重建")
@@ -299,7 +307,9 @@ def _seed_governance(conn: sqlite3.Connection, metadata: dict) -> None:
         [
             {
                 "profile_id": metadata.get("source_profile", "manual_import"),
-                "profile_name": metadata.get("source_profile", "manual_import").replace("_", " ").title(),
+                "profile_name": metadata.get("source_profile", "manual_import")
+                .replace("_", " ")
+                .title(),
                 "data_mode": metadata.get("data_mode", "Mixed"),
                 "transaction_status": transaction_status,
                 "economic_status": economic_status,
@@ -316,7 +326,12 @@ def _seed_governance(conn: sqlite3.Connection, metadata: dict) -> None:
 
     lineage = pd.DataFrame(
         [
-            ("raw_transactions", "fact_transactions", "etl.clean_transactions", "清洗、标准化及成本派生"),
+            (
+                "raw_transactions",
+                "fact_transactions",
+                "etl.clean_transactions",
+                "清洗、标准化及成本派生",
+            ),
             ("fact_transactions", "v_monthly_kpis", "warehouse SQL", "月度经营指标聚合"),
             ("fact_transactions", "inventory_snapshot", "warehouse SQL", "近90日需求与库存覆盖"),
             ("v_monthly_kpis", "forecast_outputs", "forecasting.py", "模型回测与未来预测"),
@@ -330,7 +345,9 @@ def _seed_governance(conn: sqlite3.Connection, metadata: dict) -> None:
     target_rows: list[dict] = []
     for idx, row in monthly.iterrows():
         history = monthly.iloc[max(0, idx - 3) : idx]
-        revenue_anchor = float(history["revenue"].mean()) if not history.empty else float(row["revenue"])
+        revenue_anchor = (
+            float(history["revenue"].mean()) if not history.empty else float(row["revenue"])
+        )
         profit_anchor = (
             float(history["contribution_profit"].mean())
             if not history.empty
@@ -382,9 +399,15 @@ def build_warehouse(
 
     with connect(db_path) as conn:
         inserted, skipped = _load_fact(conn, curated, load_mode)
-        result.quality_summary.to_sql("data_quality_summary", conn, if_exists="replace", index=False)
-        result.quality_dimensions.to_sql("data_quality_dimensions", conn, if_exists="replace", index=False)
-        result.contract_issues.to_sql("data_contract_issues", conn, if_exists="replace", index=False)
+        result.quality_summary.to_sql(
+            "data_quality_summary", conn, if_exists="replace", index=False
+        )
+        result.quality_dimensions.to_sql(
+            "data_quality_dimensions", conn, if_exists="replace", index=False
+        )
+        result.contract_issues.to_sql(
+            "data_contract_issues", conn, if_exists="replace", index=False
+        )
         _refresh_model(conn)
         _seed_governance(conn, result.metadata)
 

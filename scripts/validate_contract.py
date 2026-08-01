@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -15,7 +15,9 @@ from insightflow.etl import load_source, normalize_columns
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Validate a source file against the InsightFlow data contract")
+    parser = argparse.ArgumentParser(
+        description="Validate a source file against the InsightFlow data contract"
+    )
     parser.add_argument("--input", required=True)
     parser.add_argument("--contract", default=str(DEFAULT_CONTRACT_PATH))
     args = parser.parse_args()

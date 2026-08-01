@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -22,7 +22,9 @@ def main() -> None:
     args = parser.parse_args()
     ensure_directories()
     canonical = load_olist_directory(args.directory)
-    result = clean_transactions(canonical, source_profile="olist_public", transaction_status="Verified")
+    result = clean_transactions(
+        canonical, source_profile="olist_public", transaction_status="Verified"
+    )
     stats = build_warehouse(result, Path(args.db), source_name="olist_public")
     print(result.quality_summary.to_string(index=False))
     print(f"Inserted {stats['inserted_rows']:,} canonical rows into {args.db}")

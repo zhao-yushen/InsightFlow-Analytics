@@ -4,42 +4,80 @@ import re
 import unicodedata
 from collections import OrderedDict
 
-
 # Canonical market model used by demo generation, imports, filters and BI exports.
 # We keep countries and special administrative regions distinct while grouping them
 # into a stable market_region for management analysis.
 MARKETS = OrderedDict(
     [
-        ("United Kingdom", {"region": "Europe", "weight": 0.300, "shipping": 1.00, "zh-CN": "英国"}),
+        (
+            "United Kingdom",
+            {"region": "Europe", "weight": 0.300, "shipping": 1.00, "zh-CN": "英国"},
+        ),
         ("China", {"region": "Greater China", "weight": 0.090, "shipping": 2.10, "zh-CN": "中国"}),
         ("Germany", {"region": "Europe", "weight": 0.055, "shipping": 1.35, "zh-CN": "德国"}),
         ("France", {"region": "Europe", "weight": 0.050, "shipping": 1.28, "zh-CN": "法国"}),
-        ("United States", {"region": "North America", "weight": 0.040, "shipping": 2.10, "zh-CN": "美国"}),
+        (
+            "United States",
+            {"region": "North America", "weight": 0.040, "shipping": 2.10, "zh-CN": "美国"},
+        ),
         ("Netherlands", {"region": "Europe", "weight": 0.032, "shipping": 1.30, "zh-CN": "荷兰"}),
         ("Spain", {"region": "Europe", "weight": 0.028, "shipping": 1.42, "zh-CN": "西班牙"}),
         ("Italy", {"region": "Europe", "weight": 0.028, "shipping": 1.46, "zh-CN": "意大利"}),
         ("Japan", {"region": "East Asia", "weight": 0.025, "shipping": 2.22, "zh-CN": "日本"}),
         ("India", {"region": "South Asia", "weight": 0.024, "shipping": 2.18, "zh-CN": "印度"}),
         ("Poland", {"region": "Europe", "weight": 0.018, "shipping": 1.38, "zh-CN": "波兰"}),
-        ("South Korea", {"region": "East Asia", "weight": 0.018, "shipping": 2.16, "zh-CN": "韩国"}),
-        ("Australia", {"region": "Oceania", "weight": 0.018, "shipping": 2.55, "zh-CN": "澳大利亚"}),
+        (
+            "South Korea",
+            {"region": "East Asia", "weight": 0.018, "shipping": 2.16, "zh-CN": "韩国"},
+        ),
+        (
+            "Australia",
+            {"region": "Oceania", "weight": 0.018, "shipping": 2.55, "zh-CN": "澳大利亚"},
+        ),
         ("Ireland", {"region": "Europe", "weight": 0.017, "shipping": 1.18, "zh-CN": "爱尔兰"}),
         ("Belgium", {"region": "Europe", "weight": 0.017, "shipping": 1.32, "zh-CN": "比利时"}),
-        ("Canada", {"region": "North America", "weight": 0.014, "shipping": 2.18, "zh-CN": "加拿大"}),
-        ("Hong Kong SAR", {"region": "Greater China", "weight": 0.012, "shipping": 2.08, "zh-CN": "中国香港"}),
-        ("Singapore", {"region": "Southeast Asia", "weight": 0.012, "shipping": 2.05, "zh-CN": "新加坡"}),
+        (
+            "Canada",
+            {"region": "North America", "weight": 0.014, "shipping": 2.18, "zh-CN": "加拿大"},
+        ),
+        (
+            "Hong Kong SAR",
+            {"region": "Greater China", "weight": 0.012, "shipping": 2.08, "zh-CN": "中国香港"},
+        ),
+        (
+            "Singapore",
+            {"region": "Southeast Asia", "weight": 0.012, "shipping": 2.05, "zh-CN": "新加坡"},
+        ),
         ("Portugal", {"region": "Europe", "weight": 0.011, "shipping": 1.48, "zh-CN": "葡萄牙"}),
-        ("Malaysia", {"region": "Southeast Asia", "weight": 0.010, "shipping": 2.14, "zh-CN": "马来西亚"}),
-        ("Thailand", {"region": "Southeast Asia", "weight": 0.010, "shipping": 2.12, "zh-CN": "泰国"}),
-        ("Indonesia", {"region": "Southeast Asia", "weight": 0.010, "shipping": 2.24, "zh-CN": "印度尼西亚"}),
+        (
+            "Malaysia",
+            {"region": "Southeast Asia", "weight": 0.010, "shipping": 2.14, "zh-CN": "马来西亚"},
+        ),
+        (
+            "Thailand",
+            {"region": "Southeast Asia", "weight": 0.010, "shipping": 2.12, "zh-CN": "泰国"},
+        ),
+        (
+            "Indonesia",
+            {"region": "Southeast Asia", "weight": 0.010, "shipping": 2.24, "zh-CN": "印度尼西亚"},
+        ),
         ("Sweden", {"region": "Europe", "weight": 0.010, "shipping": 1.52, "zh-CN": "瑞典"}),
         ("Austria", {"region": "Europe", "weight": 0.010, "shipping": 1.36, "zh-CN": "奥地利"}),
         ("Denmark", {"region": "Europe", "weight": 0.009, "shipping": 1.40, "zh-CN": "丹麦"}),
         ("Switzerland", {"region": "Europe", "weight": 0.009, "shipping": 1.58, "zh-CN": "瑞士"}),
-        ("United Arab Emirates", {"region": "Middle East", "weight": 0.009, "shipping": 2.20, "zh-CN": "阿联酋"}),
+        (
+            "United Arab Emirates",
+            {"region": "Middle East", "weight": 0.009, "shipping": 2.20, "zh-CN": "阿联酋"},
+        ),
         ("Norway", {"region": "Europe", "weight": 0.008, "shipping": 1.62, "zh-CN": "挪威"}),
-        ("New Zealand", {"region": "Oceania", "weight": 0.006, "shipping": 2.62, "zh-CN": "新西兰"}),
-        ("Macao SAR", {"region": "Greater China", "weight": 0.003, "shipping": 2.08, "zh-CN": "中国澳门"}),
+        (
+            "New Zealand",
+            {"region": "Oceania", "weight": 0.006, "shipping": 2.62, "zh-CN": "新西兰"},
+        ),
+        (
+            "Macao SAR",
+            {"region": "Greater China", "weight": 0.003, "shipping": 2.08, "zh-CN": "中国澳门"},
+        ),
     ]
 )
 
@@ -69,7 +107,16 @@ def _register(canonical: str, *aliases: str) -> None:
         ALIASES[_key(alias)] = canonical
 
 
-_register("China", "CN", "PRC", "People's Republic of China", "Mainland China", "中国", "中国大陆", "中华人民共和国")
+_register(
+    "China",
+    "CN",
+    "PRC",
+    "People's Republic of China",
+    "Mainland China",
+    "中国",
+    "中国大陆",
+    "中华人民共和国",
+)
 _register("Hong Kong SAR", "Hong Kong", "HK", "HKSAR", "中国香港", "香港", "香港特别行政区")
 _register("Macao SAR", "Macao", "Macau", "MO", "澳门", "中国澳门", "澳门特别行政区")
 _register("South Korea", "Korea", "Republic of Korea", "KR", "KOR", "韩国", "大韩民国")

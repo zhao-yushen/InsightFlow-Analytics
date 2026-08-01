@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import streamlit as st
 
-from insightflow.i18n import current_language, lt, t
 from insightflow.config import DEFAULT_DB_PATH
-from insightflow.query_assistant import SUPPORTED_QUESTIONS, answer_business_question, question_label
+from insightflow.i18n import current_language, lt, t
+from insightflow.query_assistant import (
+    SUPPORTED_QUESTIONS,
+    answer_business_question,
+    question_label,
+)
 from insightflow.ui import page_header, sidebar_filters
 
 
@@ -23,7 +27,9 @@ def render() -> None:
             SUPPORTED_QUESTIONS,
             format_func=lambda value: question_label(value, current_language()),
         )
-        question = st.text_input(lt("自然语言问题"), value=preset, placeholder=lt("例如：为什么最近一个月贡献利润下降？"))
+        question = st.text_input(
+            lt("自然语言问题"), value=preset, placeholder=lt("例如：为什么最近一个月贡献利润下降？")
+        )
         analyze = st.button(lt("生成可验证分析"), type="primary", use_container_width=True)
     if analyze:
         result = answer_business_question(

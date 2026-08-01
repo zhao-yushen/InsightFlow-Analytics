@@ -62,7 +62,11 @@ def process_incoming_file(source: Path, db_path: Path = DEFAULT_DB_PATH) -> dict
         error_path = target.with_suffix(target.suffix + ".error.json")
         error_path.write_text(
             json.dumps(
-                {"source": source.name, "error": str(exc), "failed_at": datetime.now(timezone.utc).isoformat()},
+                {
+                    "source": source.name,
+                    "error": str(exc),
+                    "failed_at": datetime.now(timezone.utc).isoformat(),
+                },
                 ensure_ascii=False,
                 indent=2,
             ),

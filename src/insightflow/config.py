@@ -8,6 +8,7 @@ try:
 except ImportError:  # The core backend can still run without optional .env loading.
     load_dotenv = None
 
+
 def _discover_root() -> Path:
     explicit = os.getenv("INSIGHTFLOW_ROOT_DIR")
     candidates = [Path(explicit).expanduser()] if explicit else []

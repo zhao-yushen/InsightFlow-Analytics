@@ -128,7 +128,9 @@ def render() -> None:
         except Exception as exc:
             st.error(t("data.failed", error=str(exc)))
         else:
-            missing = [column for column in REQUIRED_COLUMNS if column not in result.curated.columns]
+            missing = [
+                column for column in REQUIRED_COLUMNS if column not in result.curated.columns
+            ]
             if missing:
                 st.error(t("data.missing", columns=", ".join(missing)))
             score = float(result.quality_dimensions["score_100"].mean())
@@ -194,7 +196,9 @@ def render() -> None:
 
     st.subheader(t("data.live"))
     st.info(t("data.live_help"))
-    st.code(f'insightflow watch --interval 30\n# Incoming folder: {INCOMING_DIR}', language="powershell")
+    st.code(
+        f"insightflow watch --interval 30\n# Incoming folder: {INCOMING_DIR}", language="powershell"
+    )
     live_left, live_right = st.columns(2)
     with live_left:
         if st.button("Scan incoming folder once", disabled=read_only, use_container_width=True):
@@ -215,4 +219,6 @@ def render() -> None:
         "SELECT run_at, source_name, load_mode, inserted_rows, skipped_rows FROM etl_runs ORDER BY run_at DESC LIMIT 50",
     )
     st.dataframe(history, use_container_width=True, hide_index=True)
-    st.caption(f"Database version: {database_version(DEFAULT_DB_PATH)} · Data bounds: {date_bounds(DEFAULT_DB_PATH)}")
+    st.caption(
+        f"Database version: {database_version(DEFAULT_DB_PATH)} · Data bounds: {date_bounds(DEFAULT_DB_PATH)}"
+    )

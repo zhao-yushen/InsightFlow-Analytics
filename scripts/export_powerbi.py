@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 import sqlite3
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -12,7 +12,6 @@ if str(SRC) not in sys.path:
 import pandas as pd
 
 from insightflow.config import DEFAULT_DB_PATH
-
 
 EXPORT_OBJECTS = [
     "fact_transactions",

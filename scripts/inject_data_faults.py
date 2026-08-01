@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -14,7 +14,9 @@ from insightflow.fault_injection import FaultPlan, inject_faults
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Create a deliberately corrupted dataset for data-quality demos")
+    parser = argparse.ArgumentParser(
+        description="Create a deliberately corrupted dataset for data-quality demos"
+    )
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--no-remove-month", action="store_true")

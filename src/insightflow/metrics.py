@@ -44,9 +44,9 @@ def _where(filters: FilterSpec, alias: str = "") -> tuple[str, list]:
 
 def available_filters(db_path: str | Path) -> dict[str, list[str]]:
     return {
-        "regions": query_df(db_path, "SELECT DISTINCT market_region FROM fact_transactions ORDER BY 1")[
-            "market_region"
-        ]
+        "regions": query_df(
+            db_path, "SELECT DISTINCT market_region FROM fact_transactions ORDER BY 1"
+        )["market_region"]
         .dropna()
         .tolist(),
         "countries": query_df(db_path, "SELECT DISTINCT country FROM fact_transactions ORDER BY 1")[
@@ -54,9 +54,9 @@ def available_filters(db_path: str | Path) -> dict[str, list[str]]:
         ]
         .dropna()
         .tolist(),
-        "categories": query_df(db_path, "SELECT DISTINCT category FROM fact_transactions ORDER BY 1")[
-            "category"
-        ]
+        "categories": query_df(
+            db_path, "SELECT DISTINCT category FROM fact_transactions ORDER BY 1"
+        )["category"]
         .dropna()
         .tolist(),
         "channels": query_df(db_path, "SELECT DISTINCT channel FROM fact_transactions ORDER BY 1")[
@@ -150,7 +150,9 @@ def filter_coverage(db_path: str | Path, filters: FilterSpec) -> dict[str, objec
 
 
 def date_bounds(db_path: str | Path) -> tuple[str, str]:
-    df = query_df(db_path, "SELECT MIN(date) AS min_date, MAX(date) AS max_date FROM fact_transactions")
+    df = query_df(
+        db_path, "SELECT MIN(date) AS min_date, MAX(date) AS max_date FROM fact_transactions"
+    )
     return str(df.loc[0, "min_date"]), str(df.loc[0, "max_date"])
 
 
@@ -214,7 +216,9 @@ def kpi_summary(db_path: str | Path, filters: FilterSpec) -> dict[str, float]:
     return {
         "gross_revenue": gross_revenue,
         "discount_amount": float(sales["discount_amount"] or 0),
-        "discount_rate": float(sales["discount_amount"] or 0) / gross_revenue if gross_revenue else 0.0,
+        "discount_rate": float(sales["discount_amount"] or 0) / gross_revenue
+        if gross_revenue
+        else 0.0,
         "revenue": revenue,
         "cogs": float(sales["cogs"] or 0),
         "gross_profit": gross_profit,
@@ -233,7 +237,9 @@ def kpi_summary(db_path: str | Path, filters: FilterSpec) -> dict[str, float]:
         "profit_per_customer": contribution_profit / customers if customers else 0.0,
         "purchase_frequency": orders / customers if customers else 0.0,
         "repeat_rate": float(repeat or 0),
-        "cancellation_rate": float(cancellations["cancelled_orders"] or 0) / all_orders if all_orders else 0.0,
+        "cancellation_rate": float(cancellations["cancelled_orders"] or 0) / all_orders
+        if all_orders
+        else 0.0,
     }
 
 
@@ -304,7 +310,9 @@ def dimension_performance(
     )
 
 
-def product_profitability(db_path: str | Path, filters: FilterSpec, limit: int = 100) -> pd.DataFrame:
+def product_profitability(
+    db_path: str | Path, filters: FilterSpec, limit: int = 100
+) -> pd.DataFrame:
     where, params = _where(filters)
     return query_df(
         db_path,
@@ -409,11 +417,16 @@ def customer_value_risk(db_path: str | Path, filters: FilterSpec) -> pd.DataFram
     discount_dependency = (data["avg_discount_rate"] / 0.20).clip(0, 1)
     negative_profit = (-data["contribution_profit"] / profit_scale).clip(0, 1)
     data["churn_risk"] = (
-        0.50 * recency_risk + 0.25 * low_frequency + 0.15 * discount_dependency + 0.10 * negative_profit
+        0.50 * recency_risk
+        + 0.25 * low_frequency
+        + 0.15 * discount_dependency
+        + 0.10 * negative_profit
     ).clip(0, 1)
     expected_months = (12 * (1 - data["churn_risk"])).clip(1, 12)
     monthly_profit = data["contribution_profit"] / max(
-        (pd.Timestamp(filters.end_date) - pd.Timestamp(filters.start_date)).days / 30.4 if filters.end_date and filters.start_date else 3,
+        (pd.Timestamp(filters.end_date) - pd.Timestamp(filters.start_date)).days / 30.4
+        if filters.end_date and filters.start_date
+        else 3,
         1,
     )
     data["predicted_clv"] = monthly_profit * expected_months

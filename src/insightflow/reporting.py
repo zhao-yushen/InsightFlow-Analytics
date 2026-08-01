@@ -13,7 +13,6 @@ from jinja2 import Template
 from .ai_assistant import executive_summary
 from .diagnostics import DiagnosticIssue
 
-
 HTML_TEMPLATE = Template(
     """
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
@@ -68,7 +67,6 @@ def present_drivers(drivers: pd.DataFrame) -> pd.DataFrame:
     }
     columns = [c for c in labels if c in drivers.columns]
     return drivers[columns].rename(columns=labels).copy()
-
 
 
 def present_targets(df: pd.DataFrame | None) -> pd.DataFrame:
@@ -126,6 +124,7 @@ def present_quality(df: pd.DataFrame | None) -> pd.DataFrame:
         return pd.DataFrame()
     labels = {"dimension": "质量维度", "score_100": "得分", "description": "说明"}
     return df[[c for c in labels if c in df.columns]].rename(columns=labels).copy()
+
 
 def _safe_table(df: pd.DataFrame | None, empty_text: str = "暂无数据") -> str:
     if df is None or df.empty:
@@ -276,7 +275,9 @@ def _create_word_report(
     section.right_margin = Inches(0.7)
     title = doc.add_heading("InsightFlow 经营分析与决策报告", 0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    meta = doc.add_paragraph(f"分析期间：{period}｜生成时间：{datetime.now():%Y-%m-%d %H:%M}｜摘要引擎：{engine}")
+    meta = doc.add_paragraph(
+        f"分析期间：{period}｜生成时间：{datetime.now():%Y-%m-%d %H:%M}｜摘要引擎：{engine}"
+    )
     meta.alignment = WD_ALIGN_PARAGRAPH.CENTER
     trust = doc.add_paragraph(f"数据状态：{data_profile or '未提供来源标签'}")
     trust.alignment = WD_ALIGN_PARAGRAPH.CENTER

@@ -84,43 +84,53 @@ def test_olist_adapter_preserves_string_customer_ids(tmp_path: Path):
     directory = tmp_path / "olist"
     directory.mkdir()
     pd.DataFrame(
-        [{
-            "order_id": "order-1",
-            "customer_id": "customer-key",
-            "order_status": "delivered",
-            "order_purchase_timestamp": "2025-01-02 10:00:00",
-        }]
+        [
+            {
+                "order_id": "order-1",
+                "customer_id": "customer-key",
+                "order_status": "delivered",
+                "order_purchase_timestamp": "2025-01-02 10:00:00",
+            }
+        ]
     ).to_csv(directory / "olist_orders_dataset.csv", index=False)
     pd.DataFrame(
-        [{
-            "order_id": "order-1",
-            "order_item_id": 1,
-            "product_id": "product-1",
-            "seller_id": "seller-1",
-            "shipping_limit_date": "2025-01-03",
-            "price": 30.0,
-            "freight_value": 5.0,
-        }]
+        [
+            {
+                "order_id": "order-1",
+                "order_item_id": 1,
+                "product_id": "product-1",
+                "seller_id": "seller-1",
+                "shipping_limit_date": "2025-01-03",
+                "price": 30.0,
+                "freight_value": 5.0,
+            }
+        ]
     ).to_csv(directory / "olist_order_items_dataset.csv", index=False)
     pd.DataFrame(
-        [{
-            "customer_id": "customer-key",
-            "customer_unique_id": "unique-customer-abc",
-            "customer_zip_code_prefix": 1000,
-            "customer_city": "sao paulo",
-            "customer_state": "SP",
-        }]
+        [
+            {
+                "customer_id": "customer-key",
+                "customer_unique_id": "unique-customer-abc",
+                "customer_zip_code_prefix": 1000,
+                "customer_city": "sao paulo",
+                "customer_state": "SP",
+            }
+        ]
     ).to_csv(directory / "olist_customers_dataset.csv", index=False)
     pd.DataFrame(
-        [{
-            "product_id": "product-1",
-            "product_category_name": "housewares",
-        }]
+        [
+            {
+                "product_id": "product-1",
+                "product_category_name": "housewares",
+            }
+        ]
     ).to_csv(directory / "olist_products_dataset.csv", index=False)
     from insightflow.multitable import load_olist_directory
 
     canonical = load_olist_directory(directory)
-    result = clean_transactions(canonical, source_profile="olist_public", transaction_status="Verified")
+    result = clean_transactions(
+        canonical, source_profile="olist_public", transaction_status="Verified"
+    )
     assert result.curated["customer_id"].iloc[0] == "unique-customer-abc"
     assert result.metadata["transaction_status"] == "Verified"
     assert result.metadata["economic_status"] == "Estimated"

@@ -113,7 +113,7 @@ class ETLResult:
 
 
 def _stable_fraction(value: str, salt: str = "") -> float:
-    digest = hashlib.sha256(f"{salt}|{value}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(f"{salt}|{value}".encode()).hexdigest()
     return int(digest[:12], 16) / float(16**12 - 1)
 
 
@@ -122,7 +122,8 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     duplicated = pd.Index(canonical_names)[pd.Index(canonical_names).duplicated()].unique().tolist()
     if duplicated:
         raise ValueError(
-            "字段别名映射后出现重复列: " + ", ".join(map(str, duplicated))
+            "字段别名映射后出现重复列: "
+            + ", ".join(map(str, duplicated))
             + "。请删除重复字段或只保留一个标准列名。"
         )
     renamed = df.copy()
@@ -156,8 +157,10 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 def _fill_product_economics(work: pd.DataFrame) -> pd.DataFrame:
     work = work.copy()
     product_keys = work["stock_code"].fillna("UNKNOWN").astype(str)
-    median_price_by_product = work.groupby("stock_code")["unit_price"].transform("median").fillna(
-        work["unit_price"].median()
+    median_price_by_product = (
+        work.groupby("stock_code")["unit_price"]
+        .transform("median")
+        .fillna(work["unit_price"].median())
     )
     category_ratio = work["category"].map(CATEGORY_COST_RATIO).fillna(0.50)
     stable_cost_noise = product_keys.map(lambda x: 0.92 + 0.16 * _stable_fraction(x, "cost"))
@@ -165,16 +168,20 @@ def _fill_product_economics(work: pd.DataFrame) -> pd.DataFrame:
     work["unit_cost"] = pd.to_numeric(work["unit_cost"], errors="coerce").fillna(derived_unit_cost)
     work["unit_cost"] = work["unit_cost"].clip(lower=0.01).round(2)
 
-    channel_discount = work["channel"].map(
-        {
-            "Web": 0.025,
-            "Marketplace": 0.055,
-            "Wholesale": 0.085,
-            "Mobile App": 0.035,
-            "Retail Store": 0.020,
-            "Social Commerce": 0.070,
-        }
-    ).fillna(0.03)
+    channel_discount = (
+        work["channel"]
+        .map(
+            {
+                "Web": 0.025,
+                "Marketplace": 0.055,
+                "Wholesale": 0.085,
+                "Mobile App": 0.035,
+                "Retail Store": 0.020,
+                "Social Commerce": 0.070,
+            }
+        )
+        .fillna(0.03)
+    )
     stable_discount = product_keys.map(lambda x: (_stable_fraction(x, "discount") - 0.5) * 0.02)
     work["discount_rate"] = pd.to_numeric(work["discount_rate"], errors="coerce").fillna(
         channel_discount + stable_discount
@@ -184,39 +191,53 @@ def _fill_product_economics(work: pd.DataFrame) -> pd.DataFrame:
     abs_qty = work["quantity"].abs().fillna(0)
     gross_value = abs_qty * work["unit_price"].fillna(0)
     country_mult = work["country"].map(lambda value: shipping_multiplier(value))
-    channel_shipping = work["channel"].map(
-        {
-            "Web": 1.00,
-            "Marketplace": 1.08,
-            "Wholesale": 0.72,
-            "Mobile App": 1.00,
-            "Retail Store": 0.45,
-            "Social Commerce": 1.12,
-        }
-    ).fillna(1.0)
+    channel_shipping = (
+        work["channel"]
+        .map(
+            {
+                "Web": 1.00,
+                "Marketplace": 1.08,
+                "Wholesale": 0.72,
+                "Mobile App": 1.00,
+                "Retail Store": 0.45,
+                "Social Commerce": 1.12,
+            }
+        )
+        .fillna(1.0)
+    )
     derived_shipping = (1.15 + 0.16 * abs_qty) * country_mult * channel_shipping
-    work["shipping_cost"] = pd.to_numeric(work["shipping_cost"], errors="coerce").fillna(derived_shipping)
+    work["shipping_cost"] = pd.to_numeric(work["shipping_cost"], errors="coerce").fillna(
+        derived_shipping
+    )
 
-    payment_rate = work["channel"].map(
-        {
-            "Web": 0.018,
-            "Marketplace": 0.026,
-            "Wholesale": 0.008,
-            "Mobile App": 0.020,
-            "Retail Store": 0.012,
-            "Social Commerce": 0.030,
-        }
-    ).fillna(0.02)
-    marketing_rate = work["channel"].map(
-        {
-            "Web": 0.052,
-            "Marketplace": 0.036,
-            "Wholesale": 0.012,
-            "Mobile App": 0.046,
-            "Retail Store": 0.028,
-            "Social Commerce": 0.080,
-        }
-    ).fillna(0.04)
+    payment_rate = (
+        work["channel"]
+        .map(
+            {
+                "Web": 0.018,
+                "Marketplace": 0.026,
+                "Wholesale": 0.008,
+                "Mobile App": 0.020,
+                "Retail Store": 0.012,
+                "Social Commerce": 0.030,
+            }
+        )
+        .fillna(0.02)
+    )
+    marketing_rate = (
+        work["channel"]
+        .map(
+            {
+                "Web": 0.052,
+                "Marketplace": 0.036,
+                "Wholesale": 0.012,
+                "Mobile App": 0.046,
+                "Retail Store": 0.028,
+                "Social Commerce": 0.080,
+            }
+        )
+        .fillna(0.04)
+    )
     discounted_value = gross_value * (1 - work["discount_rate"])
     work["payment_fee"] = pd.to_numeric(work["payment_fee"], errors="coerce").fillna(
         discounted_value * payment_rate
@@ -239,7 +260,9 @@ def _fill_product_economics(work: pd.DataFrame) -> pd.DataFrame:
     )
     suppliers = ["Northstar Supply", "BluePeak Trading", "Oakline Goods", "Meridian Wholesale"]
     derived_supplier = product_keys.map(
-        lambda x: suppliers[min(int(_stable_fraction(x, "supplier") * len(suppliers)), len(suppliers) - 1)]
+        lambda x: suppliers[
+            min(int(_stable_fraction(x, "supplier") * len(suppliers)), len(suppliers) - 1)
+        ]
     )
     work["supplier"] = work["supplier"].fillna(derived_supplier).astype("string")
     work["supplier_lead_days"] = pd.to_numeric(work["supplier_lead_days"], errors="coerce").fillna(
@@ -249,7 +272,8 @@ def _fill_product_economics(work: pd.DataFrame) -> pd.DataFrame:
         product_keys.map(lambda x: 40 + int(1500 * _stable_fraction(x, "inventory")))
     )
     work["reorder_point"] = pd.to_numeric(work["reorder_point"], errors="coerce").fillna(
-        work["inventory_on_hand"] * product_keys.map(lambda x: 0.14 + 0.18 * _stable_fraction(x, "reorder"))
+        work["inventory_on_hand"]
+        * product_keys.map(lambda x: 0.14 + 0.18 * _stable_fraction(x, "reorder"))
     )
     for column in (
         "shipping_cost",
@@ -288,7 +312,9 @@ def _quality_dimensions(
     )
     max_date = work["invoice_date"].max()
     min_date = work["invoice_date"].min()
-    coverage_days = max((max_date - min_date).days, 0) if pd.notna(max_date) and pd.notna(min_date) else 0
+    coverage_days = (
+        max((max_date - min_date).days, 0) if pd.notna(max_date) and pd.notna(min_date) else 0
+    )
     freshness = 1.0 if coverage_days >= 30 else coverage_days / 30
     rows = [
         ("完整性", completeness, "关键客户字段的非空程度"),
@@ -310,11 +336,18 @@ def clean_transactions(
 ) -> ETLResult:
     aliased_columns = {COLUMN_ALIASES.get(column, column) for column in df.columns}
     transaction_status = transaction_status or (
-        "Simulated" if source_profile.startswith("demo") or source_profile.startswith("multitable_demo") else "Verified"
+        "Simulated"
+        if source_profile.startswith("demo") or source_profile.startswith("multitable_demo")
+        else "Verified"
     )
     economic_inputs = {
-        "discount_rate", "unit_cost", "shipping_cost", "payment_fee",
-        "marketing_cost", "return_processing_cost", "price_elasticity"
+        "discount_rate",
+        "unit_cost",
+        "shipping_cost",
+        "payment_fee",
+        "marketing_cost",
+        "return_processing_cost",
+        "price_elasticity",
     }
     inventory_inputs = {"supplier", "supplier_lead_days", "inventory_on_hand", "reorder_point"}
     if transaction_status == "Simulated":
@@ -324,9 +357,7 @@ def clean_transactions(
         economic_status = "Verified" if economic_inputs.issubset(aliased_columns) else "Estimated"
         inventory_status = "Verified" if inventory_inputs.issubset(aliased_columns) else "Simulated"
     data_mode = (
-        transaction_status
-        if transaction_status == economic_status == inventory_status
-        else "Mixed"
+        transaction_status if transaction_status == economic_status == inventory_status else "Mixed"
     )
 
     raw = normalize_columns(df)
@@ -342,7 +373,9 @@ def clean_transactions(
     work["invoice_no"] = work["invoice_no"].astype("string").str.strip()
     work["stock_code"] = work["stock_code"].astype("string").str.strip().str.upper()
     work["description"] = work["description"].astype("string").str.strip().str.upper()
-    work["category"] = work["category"].fillna("Uncategorized").astype("string").str.strip().str.title()
+    work["category"] = (
+        work["category"].fillna("Uncategorized").astype("string").str.strip().str.title()
+    )
     work["country"] = work["country"].fillna("Unknown").map(canonical_country).astype("string")
     work["market_region"] = work["country"].map(market_region).astype("string")
     work["channel"] = work["channel"].fillna("Unknown").astype("string").str.strip().str.title()
@@ -368,8 +401,8 @@ def clean_transactions(
 
     contract = load_contract(DEFAULT_CONTRACT_PATH)
     contract_issues = validate_contract(work, contract)
-    work["is_cancellation"] = (
-        work["invoice_no"].str.upper().str.startswith("C", na=False) | (work["quantity"] < 0)
+    work["is_cancellation"] = work["invoice_no"].str.upper().str.startswith("C", na=False) | (
+        work["quantity"] < 0
     )
     abs_quantity = work["quantity"].abs()
     sign = np.where(work["quantity"] < 0, -1.0, 1.0)
@@ -396,9 +429,11 @@ def clean_transactions(
     work["date"] = work["invoice_date"].dt.date
 
     hash_columns = ["invoice_no", "stock_code", "quantity", "invoice_date", "unit_price"]
-    work["record_hash"] = pd.util.hash_pandas_object(work[hash_columns].astype("string"), index=False).astype(
-        "uint64"
-    ).astype("string")
+    work["record_hash"] = (
+        pd.util.hash_pandas_object(work[hash_columns].astype("string"), index=False)
+        .astype("uint64")
+        .astype("string")
+    )
 
     currency_columns = [
         "gross_revenue",
@@ -468,7 +503,6 @@ def clean_transactions(
     )
 
 
-
 def read_excel_transactions(source) -> pd.DataFrame:
     """Read the transaction worksheet from an Excel workbook.
 
@@ -496,6 +530,7 @@ def read_excel_transactions(source) -> pd.DataFrame:
         + "。工作表检查结果: "
         + "; ".join(diagnostics)
     )
+
 
 def load_source(path: str | Path) -> pd.DataFrame:
     source = Path(path)

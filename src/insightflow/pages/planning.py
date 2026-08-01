@@ -4,12 +4,11 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from insightflow.i18n import lt, t
 from insightflow.config import DEFAULT_DB_PATH
 from insightflow.forecasting import forecast_metric
+from insightflow.i18n import lt, t
 from insightflow.metrics import target_status
 from insightflow.ui import page_header, sidebar_filters
-
 
 LABELS = {"revenue": lt("净销售额"), "contribution_profit": lt("贡献利润"), "orders": lt("订单量")}
 
@@ -33,15 +32,26 @@ def render() -> None:
         st.dataframe(shown, use_container_width=True, hide_index=True)
 
     st.subheader(lt("未来经营预测"))
-    metric = st.selectbox(lt("预测指标"), ["revenue", "contribution_profit", "orders"], format_func=LABELS.get)
+    metric = st.selectbox(
+        lt("预测指标"), ["revenue", "contribution_profit", "orders"], format_func=LABELS.get
+    )
     horizon = st.slider(lt("预测月数"), 1, 6, 3)
     result = forecast_metric(DEFAULT_DB_PATH, metric, horizon=horizon)
     st.caption(f"{lt('自动选择模型：')}{result.selected_model}")
 
     history = result.history.rename(columns={metric: "actual"})
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=history["month"], y=history["actual"], name=lt("实际值"), mode="lines+markers"))
-    fig.add_trace(go.Scatter(x=result.forecast["month"], y=result.forecast["forecast"], name=lt("预测值"), mode="lines+markers"))
+    fig.add_trace(
+        go.Scatter(x=history["month"], y=history["actual"], name=lt("实际值"), mode="lines+markers")
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=result.forecast["month"],
+            y=result.forecast["forecast"],
+            name=lt("预测值"),
+            mode="lines+markers",
+        )
+    )
     fig.add_trace(
         go.Scatter(
             x=list(result.forecast["month"]) + list(result.forecast["month"])[::-1],

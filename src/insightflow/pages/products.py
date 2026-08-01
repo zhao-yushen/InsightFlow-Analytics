@@ -3,8 +3,8 @@ from __future__ import annotations
 import plotly.express as px
 import streamlit as st
 
-from insightflow.i18n import lt, t
 from insightflow.config import DEFAULT_DB_PATH
+from insightflow.i18n import lt, t
 from insightflow.metrics import product_profitability
 from insightflow.ui import page_header, sidebar_filters
 
@@ -24,7 +24,13 @@ def render() -> None:
     st.subheader(lt("头部商品收入与利润"))
     top = products.head(25).sort_values("revenue")
     st.plotly_chart(
-        px.bar(top, x=["revenue", "contribution_profit"], y="description", orientation="h", barmode="group"),
+        px.bar(
+            top,
+            x=["revenue", "contribution_profit"],
+            y="description",
+            orientation="h",
+            barmode="group",
+        ),
         use_container_width=True,
     )
 

@@ -1,6 +1,6 @@
+import math
 from pathlib import Path
 
-import math
 from insightflow.decision_lab import ScenarioInputs, simulate_scenario
 from insightflow.demo_data import DemoConfig, generate_demo_transactions
 from insightflow.diagnostics import profit_driver_decomposition
@@ -40,7 +40,9 @@ def test_unit_economics_reconcile(tmp_path: Path):
     kpi = kpi_summary(db, filters)
     assert math.isclose(kpi["revenue"], kpi["gross_revenue"] - kpi["discount_amount"], abs_tol=0.1)
     assert math.isclose(kpi["gross_profit"], kpi["revenue"] - kpi["cogs"], abs_tol=0.1)
-    expected = kpi["gross_profit"] - kpi["shipping_cost"] - kpi["payment_fee"] - kpi["marketing_cost"]
+    expected = (
+        kpi["gross_profit"] - kpi["shipping_cost"] - kpi["payment_fee"] - kpi["marketing_cost"]
+    )
     assert math.isclose(kpi["contribution_profit"], expected, abs_tol=0.1)
 
 
@@ -53,7 +55,9 @@ def test_profit_bridge_and_baseline_scenario_reconcile(tmp_path: Path):
     assert math.isclose(bridge["profit_contribution"].sum(), expected_change, abs_tol=0.2)
     baseline = simulate_scenario(db, filters, ScenarioInputs(name="Baseline"))
     assert math.isclose(float(baseline["revenue"]), current["revenue"], abs_tol=0.2)
-    assert math.isclose(float(baseline["contribution_profit"]), current["contribution_profit"], abs_tol=0.2)
+    assert math.isclose(
+        float(baseline["contribution_profit"]), current["contribution_profit"], abs_tol=0.2
+    )
 
 
 def test_forecast_targets_inventory_and_quality(tmp_path: Path):

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import sys
 import time
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -11,7 +11,13 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from insightflow.config import DEFAULT_DB_PATH
-from insightflow.metrics import FilterSpec, date_bounds, kpi_summary, monthly_trend, product_profitability
+from insightflow.metrics import (
+    FilterSpec,
+    date_bounds,
+    kpi_summary,
+    monthly_trend,
+    product_profitability,
+)
 from insightflow.warehouse import query_df
 
 
@@ -28,8 +34,14 @@ def main() -> None:
     checks = [
         timed("kpi_summary", lambda: kpi_summary(DEFAULT_DB_PATH, filters)),
         timed("monthly_trend", lambda: monthly_trend(DEFAULT_DB_PATH, filters)),
-        timed("product_profitability", lambda: product_profitability(DEFAULT_DB_PATH, filters, limit=100)),
-        timed("contract_issues", lambda: query_df(DEFAULT_DB_PATH, "SELECT * FROM data_contract_issues")),
+        timed(
+            "product_profitability",
+            lambda: product_profitability(DEFAULT_DB_PATH, filters, limit=100),
+        ),
+        timed(
+            "contract_issues",
+            lambda: query_df(DEFAULT_DB_PATH, "SELECT * FROM data_contract_issues"),
+        ),
     ]
     rows = int(query_df(DEFAULT_DB_PATH, "SELECT COUNT(*) n FROM fact_transactions").iloc[0, 0])
     output = {

@@ -1,5 +1,5 @@
-from pathlib import Path
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -50,7 +50,9 @@ def main() -> None:
         f"成本：{STATUS_LABELS.get(str(profile.get('economic_status', 'Mixed')), '混合')}；"
         f"库存：{STATUS_LABELS.get(str(profile.get('inventory_status', 'Mixed')), '混合')}"
     )
-    profit_bridge = profit_driver_decomposition(kpi, kpi_summary(DEFAULT_DB_PATH, previous_period(filters)))
+    profit_bridge = profit_driver_decomposition(
+        kpi, kpi_summary(DEFAULT_DB_PATH, previous_period(filters))
+    )
 
     html = build_html_report(
         REPORTS_DIR / "insightflow_business_report.html",

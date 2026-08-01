@@ -3,7 +3,6 @@ from __future__ import annotations
 import plotly.express as px
 import streamlit as st
 
-from insightflow.i18n import current_language, lt, t
 from insightflow.config import DEFAULT_DB_PATH
 from insightflow.decision_lab import (
     ScenarioInputs,
@@ -11,6 +10,7 @@ from insightflow.decision_lab import (
     compare_scenarios,
     monte_carlo_scenario,
 )
+from insightflow.i18n import current_language, lt, t
 from insightflow.ui import page_header, render_trust_banner, sidebar_filters
 
 
@@ -51,9 +51,16 @@ def render() -> None:
     deterministic_tab, uncertainty_tab = st.tabs([lt("方案点估计"), lt("Monte Carlo风险模拟")])
     with deterministic_tab:
         presets = [
-            ScenarioInputs(name="Profit Protection", price_change_pct=2, discount_change_pp=-1.5, unit_cost_change_pct=-3),
+            ScenarioInputs(
+                name="Profit Protection",
+                price_change_pct=2,
+                discount_change_pp=-1.5,
+                unit_cost_change_pct=-3,
+            ),
             ScenarioInputs(name="Growth Push", discount_change_pp=3, marketing_change_pct=25),
-            ScenarioInputs(name="Operations Fix", shipping_cost_change_pct=-8, cancellation_change_pp=-1.5),
+            ScenarioInputs(
+                name="Operations Fix", shipping_cost_change_pct=-8, cancellation_change_pp=-1.5
+            ),
             scenario,
         ]
         comparison = compare_scenarios(DEFAULT_DB_PATH, filters, presets)
@@ -63,7 +70,12 @@ def render() -> None:
             y="contribution_profit_change",
             size="orders",
             color="scenario",
-            hover_data=["gross_margin", "contribution_margin", "discount_rate", "cancellation_rate"],
+            hover_data=[
+                "gross_margin",
+                "contribution_margin",
+                "discount_rate",
+                "cancellation_rate",
+            ],
         )
         fig.add_hline(y=0, line_dash="dash")
         fig.add_vline(x=0, line_dash="dash")
@@ -99,7 +111,9 @@ def render() -> None:
         with cols[2]:
             cost_sd = st.number_input(lt("采购成本冲击"), 0.005, 0.20, 0.025, 0.005)
         with cols[3]:
-            simulations = st.select_slider(lt("模拟次数"), options=[1000, 2500, 5000, 10000], value=5000)
+            simulations = st.select_slider(
+                lt("模拟次数"), options=[1000, 2500, 5000, 10000], value=5000
+            )
         uncertainty = UncertaintyInputs(
             elasticity_sd=elasticity_sd,
             baseline_demand_sd=demand_sd,

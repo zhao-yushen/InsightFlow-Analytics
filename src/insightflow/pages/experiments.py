@@ -3,9 +3,9 @@ from __future__ import annotations
 import plotly.express as px
 import streamlit as st
 
-from insightflow.i18n import lt, t
 from insightflow.config import DEFAULT_DB_PATH
 from insightflow.experiments import analyze_experiment, experiment_catalog
+from insightflow.i18n import lt, t
 from insightflow.ui import page_header, sidebar_filters
 
 
@@ -31,7 +31,9 @@ def render() -> None:
     cols = st.columns(5)
     cols[0].metric(lt("样本量"), f"{summary.sample_size:,}")
     cols[1].metric(lt("单客利润提升"), f"£{summary.lift:,.2f}")
-    cols[2].metric(lt("95%区间"), f"£{summary.confidence_low:,.2f}～£{summary.confidence_high:,.2f}")
+    cols[2].metric(
+        lt("95%区间"), f"£{summary.confidence_low:,.2f}～£{summary.confidence_high:,.2f}"
+    )
     cols[3].metric(lt("改善概率"), f"{summary.probability_positive:.1%}")
     cols[4].metric(lt("利润护栏"), summary.guardrail_status)
     if "不建议" in summary.decision or "not recommend" in summary.decision.lower():
@@ -49,10 +51,17 @@ def render() -> None:
             var_name="group",
             value_name="mean",
         )
-        st.plotly_chart(px.bar(chart, x="metric", y="mean", color="group", barmode="group"), use_container_width=True)
+        st.plotly_chart(
+            px.bar(chart, x="metric", y="mean", color="group", barmode="group"),
+            use_container_width=True,
+        )
     with right:
         st.subheader(lt("随机分组与护栏"))
         st.dataframe(balance.round(4), use_container_width=True, hide_index=True)
     st.subheader(lt("指标效应与Bootstrap区间"))
     st.dataframe(metrics.round(4), use_container_width=True, hide_index=True)
-    st.markdown(lt("**判断原则：** 订单、转化和收入提升不能替代利润判断；当收入改善但贡献利润下降时，系统会阻止全量推广。"))
+    st.markdown(
+        lt(
+            "**判断原则：** 订单、转化和收入提升不能替代利润判断；当收入改善但贡献利润下降时，系统会阻止全量推广。"
+        )
+    )

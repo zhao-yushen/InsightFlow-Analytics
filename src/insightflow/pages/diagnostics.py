@@ -3,7 +3,6 @@ from __future__ import annotations
 import plotly.express as px
 import streamlit as st
 
-from insightflow.i18n import lt, t
 from insightflow.config import DEFAULT_DB_PATH
 from insightflow.diagnostics import (
     dimension_change,
@@ -11,6 +10,7 @@ from insightflow.diagnostics import (
     monthly_anomalies,
     profit_driver_decomposition,
 )
+from insightflow.i18n import lt, t
 from insightflow.metrics import kpi_summary, previous_period
 from insightflow.ui import page_header, sidebar_filters
 
@@ -25,7 +25,9 @@ def render() -> None:
     issues, revenue_drivers = generate_diagnostics(DEFAULT_DB_PATH, filters)
 
     for issue in issues:
-        with st.expander(f"{issue.severity}｜{issue.title}", expanded=issue.severity in {"P0", "P1"}):
+        with st.expander(
+            f"{issue.severity}｜{issue.title}", expanded=issue.severity in {"P0", "P1"}
+        ):
             st.write(issue.finding)
             st.markdown(f"{lt('**证据：** ')}{issue.evidence}")
             st.markdown(f"{lt('**建议：** ')}{issue.recommendation}")
@@ -50,7 +52,11 @@ def render() -> None:
         )
 
     st.subheader(lt("结构贡献定位"))
-    dimension = st.selectbox(lt("维度"), ["country", "category", "channel"], format_func={"country": lt("国家/地区"), "category": lt("品类"), "channel": lt("渠道")}.get)
+    dimension = st.selectbox(
+        lt("维度"),
+        ["country", "category", "channel"],
+        format_func={"country": lt("国家/地区"), "category": lt("品类"), "channel": lt("渠道")}.get,
+    )
     change = dimension_change(DEFAULT_DB_PATH, filters, dimension, limit=50)
     metric = st.radio(lt("变化指标"), ["change", "profit_change"], horizontal=True)
     st.plotly_chart(

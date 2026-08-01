@@ -168,13 +168,19 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("bootstrap", help="Generate demo data and initialize the warehouse")
     validate_parser = sub.add_parser("validate", help="Run saved data-contract checks")
-    validate_parser.add_argument("--strict", action="store_true", help="Fail on P1 warnings as well as P0 blockers")
+    validate_parser.add_argument(
+        "--strict", action="store_true", help="Fail on P1 warnings as well as P0 blockers"
+    )
     sub.add_parser("report", help="Generate HTML and Word management reports")
     benchmark_parser = sub.add_parser("benchmark", help="Benchmark KPI query latency")
     benchmark_parser.add_argument("--runs", type=int, default=10)
     watch_parser = sub.add_parser("watch", help="Watch data/incoming and append new files")
-    watch_parser.add_argument("--interval", type=int, default=30, help="Polling interval in seconds")
-    watch_parser.add_argument("--once", action="store_true", help="Process current files once and exit")
+    watch_parser.add_argument(
+        "--interval", type=int, default=30, help="Polling interval in seconds"
+    )
+    watch_parser.add_argument(
+        "--once", action="store_true", help="Process current files once and exit"
+    )
     run_parser = sub.add_parser("run", help="Launch the Streamlit application")
     run_parser.add_argument("streamlit_args", nargs=argparse.REMAINDER)
     return parser
