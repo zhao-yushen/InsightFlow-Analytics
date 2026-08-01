@@ -16,3 +16,5 @@ reports/*.docx
 !data/processed/.gitkeep
 !data/warehouse/.gitkeep
 !reports/.gitkeep
+
+*.egg-info/
