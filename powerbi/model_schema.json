@@ -1,0 +1,48 @@
+{
+  "model": "InsightFlow Executive Analytics",
+  "version": "0.4.3.3",
+  "tables": {
+    "fact_transactions": {
+      "grain": "one order line",
+      "role": "fact"
+    },
+    "dim_date": {
+      "key": "date",
+      "role": "dimension"
+    },
+    "dim_customer": {
+      "key": "customer_id",
+      "role": "dimension"
+    },
+    "dim_product": {
+      "key": "stock_code",
+      "role": "dimension"
+    },
+    "dim_country": {
+      "key": "country",
+      "attributes": [
+        "market_region"
+      ],
+      "role": "geography dimension"
+    },
+    "business_targets": {
+      "grain": "metric-month",
+      "role": "planning fact"
+    },
+    "experiment_assignments": {
+      "grain": "customer-experiment",
+      "role": "experiment fact"
+    },
+    "metric_catalog": {
+      "grain": "metric",
+      "role": "semantic metadata"
+    }
+  },
+  "refresh_order": [
+    "dimensions",
+    "fact_transactions",
+    "business_targets",
+    "experiment_assignments",
+    "metric_catalog"
+  ]
+}

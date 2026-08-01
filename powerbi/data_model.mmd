@@ -1,0 +1,9 @@
+erDiagram
+    DIM_DATE ||--o{ FACT_TRANSACTIONS : date
+    DIM_CUSTOMER ||--o{ FACT_TRANSACTIONS : customer_id
+    DIM_PRODUCT ||--o{ FACT_TRANSACTIONS : stock_code
+    DIM_COUNTRY ||--o{ FACT_TRANSACTIONS : country
+    BUSINESS_TARGETS }o--|| DIM_DATE : target_period
+    METRIC_CATALOG ||--o{ BUSINESS_TARGETS : metric_id
+    EXPERIMENT_CATALOG ||--o{ EXPERIMENT_ASSIGNMENTS : experiment_id
+    DIM_CUSTOMER ||--o{ EXPERIMENT_ASSIGNMENTS : customer_id

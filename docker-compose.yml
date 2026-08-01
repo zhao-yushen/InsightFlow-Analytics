@@ -1,0 +1,29 @@
+services:
+  insightflow:
+    build: .
+    ports:
+      - "8501:8501"
+    environment:
+      INSIGHTFLOW_ROOT_DIR: /app
+      INSIGHTFLOW_DB_PATH: /app/data/warehouse/insightflow.db
+      INSIGHTFLOW_SERVER_ADDRESS: 0.0.0.0
+      INSIGHTFLOW_SERVER_PORT: "8501"
+      INSIGHTFLOW_READ_ONLY: "true"
+      INSIGHTFLOW_APP_ENV: public-demo
+    volumes:
+      - insightflow-data:/app/data
+      - insightflow-reports:/app/reports
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1g
+    cpus: 1.5
+    restart: unless-stopped
+
+volumes:
+  insightflow-data:
+  insightflow-reports:

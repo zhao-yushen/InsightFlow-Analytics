@@ -1,0 +1,62 @@
+{
+  "contract_id": "retail_transactions_v2",
+  "description": "Canonical transaction contract for InsightFlow retail analytics.",
+  "primary_key": [
+    "invoice_no",
+    "stock_code",
+    "invoice_date",
+    "quantity",
+    "unit_price"
+  ],
+  "required_columns": [
+    "invoice_no",
+    "stock_code",
+    "description",
+    "quantity",
+    "invoice_date",
+    "unit_price",
+    "country"
+  ],
+  "rules": {
+    "invoice_no": {
+      "nullable": false
+    },
+    "stock_code": {
+      "nullable": false
+    },
+    "description": {
+      "nullable": false
+    },
+    "quantity": {
+      "nullable": false,
+      "non_zero": true
+    },
+    "invoice_date": {
+      "nullable": false,
+      "type": "datetime",
+      "not_future": true
+    },
+    "unit_price": {
+      "nullable": false,
+      "min_exclusive": 0
+    },
+    "discount_rate": {
+      "min": 0,
+      "max": 0.35
+    },
+    "unit_cost": {
+      "min_exclusive": 0
+    }
+  },
+  "allowed_values": {
+    "channel": [
+      "Web",
+      "Marketplace",
+      "Wholesale",
+      "Mobile App",
+      "Retail Store",
+      "Social Commerce",
+      "Unknown"
+    ]
+  }
+}
