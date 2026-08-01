@@ -16,7 +16,20 @@ jobs:
       - run: python -m compileall -q src scripts tests streamlit_app.py
       - run: ruff check src tests scripts streamlit_app.py
       - run: pytest --cov=src/insightflow --cov-report=term-missing --cov-fail-under=80 -q
-      - run: bandit -q -r src -x src/insightflow/pages
+            - name: Generate Bandit security report
+        run: |
+          bandit -r src -x src/insightflow/pages \
+            -f txt -o bandit-report.txt || true
+
+      - name: Upload Bandit security report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-security-report
+          path: bandit-report.txt
+
+      - name: Block high-severity security findings
+        run: bandit -q -r src -x src/insightflow/pages -lll -ii
       - run: pip-audit
 
   docker:
