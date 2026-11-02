@@ -15,3 +15,5 @@ python scripts/import_olist.py --directory "/path/to/olist" --db data/warehouse/
 ```
 
 The adapter uses validated many-to-one joins and converts the source to the canonical order-line grain. Procurement cost, inventory, marketing and elasticity are intentionally not fabricated as verified fields; downstream metrics label them Estimated or Simulated.
+
+Olist amounts are in Brazilian reais, so the warehouse reports in BRL. Cancelled and unavailable orders are recorded as a sale plus its reversal, which nets to zero while still counting toward the return rate.

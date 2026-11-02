@@ -1,224 +1,318 @@
 from __future__ import annotations
 
-from io import BytesIO
-from pathlib import Path
-
 import pandas as pd
 import streamlit as st
 
 from insightflow.config import DEFAULT_DB_PATH, INCOMING_DIR, is_read_only
+from insightflow.currency import SYMBOLS, warehouse_currency
 from insightflow.data_contracts import blocking_contract_issues
-from insightflow.etl import REQUIRED_COLUMNS, clean_transactions, read_excel_transactions
-from insightflow.i18n import t
+from insightflow.etl import clean_transactions
+from insightflow.i18n import t, tr
+from insightflow.ingest import (
+    SUPPORTED_SUFFIXES,
+    apply_mapping,
+    missing_required,
+    read_table,
+    suggest_mapping,
+)
+from insightflow.live import gauge_strip
 from insightflow.metrics import date_bounds, filter_option_counts
-from insightflow.ui import page_header, sidebar_filters
+from insightflow.ui import (
+    gauge_item,
+    note,
+    page_header,
+    section_header,
+    sidebar_filters,
+    subhead,
+    trust_sentence,
+    verdict,
+)
 from insightflow.warehouse import build_warehouse, database_version, query_df
 from insightflow.watcher import scan_once
 
-
-def _read_uploaded_file(name: str, content: bytes) -> pd.DataFrame:
-    suffix = Path(name).suffix.lower()
-    stream = BytesIO(content)
-    if suffix == ".csv":
-        return pd.read_csv(stream)
-    if suffix in {".xlsx", ".xls"}:
-        return read_excel_transactions(stream)
-    if suffix == ".parquet":
-        return pd.read_parquet(stream)
-    raise ValueError(t("data.unsupported", suffix=suffix))
+CORE_FIELDS = {
+    "invoice_no": ("订单号", "Order number"),
+    "stock_code": ("商品编码", "Product code"),
+    "description": ("商品名称", "Product name"),
+    "quantity": ("数量", "Quantity"),
+    "invoice_date": ("下单时间", "Order date"),
+    "unit_price": ("单价", "Unit price"),
+    "line_amount": ("行金额（无单价时使用）", "Line amount (if no unit price)"),
+    "country": ("国家", "Country"),
+}
+OPTIONAL_FIELDS = {
+    "customer_id": ("客户", "Customer"),
+    "category": ("品类", "Category"),
+    "channel": ("渠道", "Channel"),
+    "order_status": ("订单状态", "Order status"),
+    "discount_rate": ("折扣率", "Discount rate"),
+    "unit_cost": ("单位成本", "Unit cost"),
+    "shipping_cost": ("运费", "Shipping cost"),
+    "payment_fee": ("支付手续费", "Payment fee"),
+    "marketing_cost": ("营销费用", "Marketing cost"),
+    "inventory_on_hand": ("库存", "Stock on hand"),
+    "supplier": ("供应商", "Supplier"),
+    "currency": ("币种", "Currency"),
+}
+NOT_MAPPED = "—"
 
 
 @st.cache_data(show_spinner=False, max_entries=8)
-def _prepare_upload(name: str, content: bytes):
-    frame = _read_uploaded_file(name, content)
-    result = clean_transactions(
-        frame,
-        source_profile="web_incremental_import",
-        transaction_status="Verified",
-    )
-    return frame, result
+def _read_upload(name: str, content: bytes) -> pd.DataFrame:
+    return read_table(content, name)
 
 
 def _template_csv() -> bytes:
     sample = pd.DataFrame(
         [
             {
-                "invoice_no": "INV-20260801-0001",
-                "stock_code": "SKU-0001",
-                "description": "Example product",
-                "category": "Electronics",
-                "quantity": 2,
-                "invoice_date": "2026-08-01 10:30:00",
-                "unit_price": 29.90,
-                "customer_id": "CUST-0001",
-                "country": "China",
-                "market_region": "Greater China",
-                "channel": "Mobile App",
-                "unit_cost": 15.20,
-                "discount_rate": 0.05,
+                "订单号": "INV-0001",
+                "商品编码": "SKU-0001",
+                "商品名称": "保温杯",
+                "品类": "Kitchen",
+                "数量": 2,
+                "下单时间": "2025-08-01 10:30:00",
+                "单价": 29.90,
+                "客户ID": "CUST-0001",
+                "国家": "中国",
+                "渠道": "Mobile App",
+                "成本": 15.20,
+                "折扣率": 0.05,
             }
         ]
     )
     return sample.to_csv(index=False).encode("utf-8-sig")
 
 
-def render() -> None:
-    page_header(
-        t("page.data_hub.title"),
-        t("page.data_hub.desc"),
-        eyebrow="DATA OPERATIONS",
-    )
-    sidebar_filters(DEFAULT_DB_PATH)
-    read_only = is_read_only()
+def _mapping_controls(frame: pd.DataFrame) -> dict[str, str]:
+    """Show each field with the column it was matched to, editable by the user."""
+    suggested = suggest_mapping(frame)
+    options = [NOT_MAPPED, *map(str, frame.columns)]
+    mapping: dict[str, str] = {}
 
-    total = query_df(
-        DEFAULT_DB_PATH,
-        "SELECT COUNT(*) AS rows, MIN(date) AS min_date, MAX(date) AS max_date FROM fact_transactions",
-    ).iloc[0]
-    last_run = query_df(
-        DEFAULT_DB_PATH,
-        "SELECT run_at, source_name, load_mode, inserted_rows, skipped_rows FROM etl_runs ORDER BY run_at DESC LIMIT 1",
-    )
-    counts = filter_option_counts(DEFAULT_DB_PATH)
+    def picker(field: str, label: str) -> None:
+        match = suggested.get(field)
+        index = options.index(match.column) if match else 0
+        help_text = None
+        if match and match.confidence < 1.0:
+            help_text = tr(
+                f"自动匹配，置信度 {match.confidence:.0%}，请确认。",
+                f"Matched automatically at {match.confidence:.0%} confidence. Please confirm.",
+            )
+        chosen = st.selectbox(label, options, index=index, key=f"map_{field}", help=help_text)
+        if chosen != NOT_MAPPED:
+            mapping[field] = chosen
 
-    st.subheader(t("data.current_warehouse"))
-    cols = st.columns(4)
-    cols[0].metric(t("data.rows"), f"{int(total['rows']):,}")
-    cols[1].metric(t("data.date_range"), f"{total['min_date']} → {total['max_date']}")
-    cols[2].metric(
-        t("data.last_run"),
-        "—" if last_run.empty else str(last_run.iloc[0]["run_at"])[:19].replace("T", " "),
-    )
-    cols[3].metric(
-        t("data.dimensions"),
-        f"{len(counts['regions'])} / {len(counts['countries'])} / {len(counts['categories'])} / {len(counts['channels'])}",
-        help="Market region / Country or region / Category / Channel",
-    )
-
-    dim_rows = []
-    for dimension, values in counts.items():
-        dim_rows.append(
-            {
-                "dimension": dimension,
-                t("data.dimension_count"): len(values),
-                "top_values": ", ".join(list(values)[:8]),
-            }
+    columns = st.columns(4)
+    for index, (field, (chinese, english)) in enumerate(CORE_FIELDS.items()):
+        with columns[index % 4]:
+            picker(field, tr(chinese, english))
+    with st.expander(tr("可选字段：提供后可减少估算", "Optional fields: each one replaces an estimate")):
+        columns = st.columns(4)
+        for index, (field, (chinese, english)) in enumerate(OPTIONAL_FIELDS.items()):
+            with columns[index % 4]:
+                picker(field, tr(chinese, english))
+    low = [item for item in suggested.values() if item.confidence < 0.8]
+    if low:
+        note(
+            tr(
+                f"有 {len(low)} 个字段是按相似度或数值特征匹配的，导入前请确认。",
+                f"{len(low)} fields were matched by similarity or by their values. Confirm before importing.",
+            )
         )
-    st.dataframe(pd.DataFrame(dim_rows), use_container_width=True, hide_index=True)
+    return mapping
 
-    st.subheader(t("data.upload"))
-    st.caption(t("data.upload_help"))
+
+def _upload_flow(read_only: bool, warehouse_code: str) -> None:
+    section_header(tr("导入数据", "Import data"))
+    note(
+        tr(
+            "支持 CSV、TSV、Excel、Parquet 和 JSON，能读取 GBK 编码、中文表头和带货币符号的数字。",
+            "CSV, TSV, Excel, Parquet and JSON are supported, including GBK encoding, Chinese "
+            "headers and numbers with currency symbols.",
+        )
+    )
     uploaded = st.file_uploader(
         t("data.upload"),
-        type=["csv", "xlsx", "xls", "parquet"],
+        type=[suffix.lstrip(".") for suffix in sorted(SUPPORTED_SUFFIXES)],
         label_visibility="collapsed",
     )
     st.download_button(
-        t("data.template"),
+        tr("下载导入模板", "Download import template"),
         _template_csv(),
         file_name="insightflow_input_template.csv",
         mime="text/csv",
     )
-
     if uploaded is None:
-        st.info(t("data.no_file"))
-    else:
-        try:
-            raw, result = _prepare_upload(uploaded.name, uploaded.getvalue())
-        except Exception as exc:
-            st.error(t("data.failed", error=str(exc)))
-        else:
-            missing = [
-                column for column in REQUIRED_COLUMNS if column not in result.curated.columns
-            ]
-            if missing:
-                st.error(t("data.missing", columns=", ".join(missing)))
-            score = float(result.quality_dimensions["score_100"].mean())
-            failures = int((result.contract_issues["severity"] != "PASS").sum())
-            blocking = blocking_contract_issues(result.contract_issues)
-            preview_cols = st.columns(4)
-            preview_cols[0].metric(t("data.file_rows"), f"{len(raw):,}")
-            preview_cols[1].metric(t("data.cleaned_rows"), f"{len(result.curated):,}")
-            preview_cols[2].metric(t("data.quality_score"), f"{score:.1f}/100")
-            preview_cols[3].metric(t("data.contract_issues"), f"{failures:,}")
-            st.dataframe(result.curated.head(100), use_container_width=True, hide_index=True)
-            if failures:
-                st.dataframe(result.contract_issues, use_container_width=True, hide_index=True)
-                if not blocking.empty:
-                    st.error(
-                        "存在P0/P1阻断问题，必须先修复后才能导入。P2为未登记类别警告，可继续导入。"
-                    )
-                else:
-                    st.warning("仅存在P2提示：数据可以导入，但请复核未登记类别。")
-            else:
-                st.success(t("data.valid"))
-            import_mode_label = st.radio(
-                t("data.import_mode"),
-                [t("data.append"), t("data.replace")],
-                horizontal=True,
-                key="data_hub_import_mode",
-            )
-            load_mode = "replace" if import_mode_label == t("data.replace") else "append"
-            if load_mode == "replace":
-                st.warning(t("data.replace_warning"))
-            if read_only:
-                st.info(t("data.read_only"))
-            if st.button(
-                t("data.import"),
-                type="primary",
-                disabled=read_only or bool(missing) or not blocking.empty,
-            ):
-                stats = build_warehouse(
-                    result,
-                    DEFAULT_DB_PATH,
-                    load_mode=load_mode,
-                    source_name=uploaded.name,
-                )
-                st.cache_data.clear()
-                # Reset the date window so newly imported periods become visible.
-                st.session_state.pop("global_analysis_period", None)
-                if load_mode == "replace":
-                    for key in (
-                        "filter_regions",
-                        "filter_countries",
-                        "filter_categories",
-                        "filter_channels",
-                    ):
-                        st.session_state.pop(key, None)
-                st.success(
-                    t(
-                        "data.imported",
-                        inserted=stats["inserted_rows"],
-                        skipped=stats["skipped_rows"],
-                    )
-                )
-                st.rerun()
+        return
+    try:
+        frame = _read_upload(uploaded.name, uploaded.getvalue())
+    except Exception as error:
+        st.error(tr(f"无法读取文件：{error}", f"Could not read the file: {error}"))
+        return
 
-    st.subheader(t("data.live"))
-    st.info(t("data.live_help"))
-    st.code(
-        f"insightflow watch --interval 30\n# Incoming folder: {INCOMING_DIR}", language="powershell"
+    subhead(tr("确认字段对应关系", "Confirm the field mapping"))
+    mapping = _mapping_controls(frame)
+    gaps = missing_required(mapping)
+    if gaps:
+        names = [tr(*CORE_FIELDS.get(gap, (gap, gap))) for gap in gaps]
+        st.error(tr(f"还缺少：{'、'.join(names)}", f"Still missing: {', '.join(names)}"))
+        return
+
+    subhead(tr("补充信息", "Details"))
+    codes = sorted(SYMBOLS)
+    left, middle, right = st.columns(3)
+    with left:
+        default_country = st.text_input(
+            tr("文件没有国家字段时使用", "Country if the file has none"),
+            value=tr("中国", "China"),
+            disabled="country" in mapping,
+        )
+    with middle:
+        file_code = st.selectbox(
+            tr("文件币种", "File currency"),
+            codes,
+            index=codes.index(warehouse_code) if warehouse_code in codes else 0,
+        )
+    load_mode = "append"
+    with right:
+        replace = st.toggle(
+            tr("替换仓库全部数据", "Replace the whole warehouse"),
+            help=t("data.replace_warning"),
+        )
+        load_mode = "replace" if replace else "append"
+    target_code = file_code if replace else warehouse_code
+    rates: dict[str, float] = {}
+    if file_code != target_code:
+        rate = st.number_input(
+            tr(f"1 {file_code} 等于多少 {target_code}", f"1 {file_code} equals how many {target_code}"),
+            min_value=0.0,
+            value=1.0,
+            step=0.01,
+            format="%.4f",
+        )
+        rates[file_code] = rate
+
+    canonical, notes = apply_mapping(frame, mapping, default_country=default_country)
+    if "currency" not in canonical:
+        canonical["currency"] = file_code
+    result = clean_transactions(
+        canonical,
+        source_profile="web_incremental_import",
+        transaction_status="Verified",
+        currency=target_code,
+        fx_rates=rates,
     )
-    live_left, live_right = st.columns(2)
-    with live_left:
-        if st.button("Scan incoming folder once", disabled=read_only, use_container_width=True):
+    blocking = blocking_contract_issues(result.contract_issues)
+    warnings = int((result.contract_issues["severity"] == "P2").sum())
+    score = float(result.quality_dimensions["score_100"].mean())
+
+    subhead(tr("导入前检查", "Pre-import check"))
+    gauge_strip(
+        [
+            gauge_item(tr("文件行数", "Rows in file"), len(frame), "count", f"{len(frame):,}", note_text=""),
+            gauge_item(tr("有效销售行", "Valid sales rows"), result.metadata["valid_sales_rows"], "count", f"{result.metadata['valid_sales_rows']:,}", note_text=""),
+            gauge_item(tr("质量得分", "Quality score"), score, "count", f"{score:.1f}", note_text="/100"),
+            gauge_item(tr("阻断问题", "Blocking issues"), len(blocking), "count", f"{len(blocking)}", note_text=""),
+        ],
+        key="data_hub_precheck",
+    )
+    for item in notes:
+        st.caption(item)
+    if not blocking.empty:
+        verdict(
+            tr("不能导入", "Cannot import"),
+            tr("下列问题必须先在源文件中修复。", "Fix the issues below in the source file first."),
+            "bad",
+        )
+        st.dataframe(result.contract_issues, hide_index=True)
+    elif warnings:
+        verdict(
+            tr("可以导入", "Ready to import"),
+            tr(f"有 {warnings} 项未登记类别的提示，不影响导入。", f"{warnings} unregistered-category notes; these do not block import."),
+            "warning",
+        )
+    else:
+        verdict(tr("可以导入", "Ready to import"), tr("数据通过全部契约检查。", "All contract checks passed."), "good")
+    with st.expander(tr("预览清洗结果", "Preview cleaned data")):
+        st.dataframe(result.curated.head(100), hide_index=True)
+
+    if read_only:
+        st.info(t("data.read_only"))
+    if replace:
+        st.warning(t("data.replace_warning"))
+    if st.button(
+        tr("确认导入", "Import data"),
+        type="primary",
+        disabled=read_only or not blocking.empty,
+    ):
+        try:
+            stats = build_warehouse(
+                result, DEFAULT_DB_PATH, load_mode=load_mode, source_name=uploaded.name
+            )
+        except ValueError as error:
+            st.error(str(error))
+            return
+        st.cache_data.clear()
+        st.session_state.pop("global_analysis_period", None)
+        if load_mode == "replace":
+            for key in ("filter_regions", "filter_countries", "filter_categories", "filter_channels"):
+                st.session_state.pop(key, None)
+        st.success(t("data.imported", inserted=stats["inserted_rows"], skipped=stats["skipped_rows"]))
+        st.rerun()
+
+
+def render() -> None:
+    sidebar_filters(DEFAULT_DB_PATH)
+    read_only = is_read_only()
+    code = warehouse_currency(DEFAULT_DB_PATH)
+    total = query_df(
+        DEFAULT_DB_PATH,
+        "SELECT COUNT(*) AS rows, MIN(date) AS min_date, MAX(date) AS max_date FROM fact_transactions",
+    ).iloc[0]
+    counts = filter_option_counts(DEFAULT_DB_PATH)
+    page_header(
+        t("page.data_hub.title"),
+        tr(
+            f"仓库现有 {int(total['rows']):,} 行交易，覆盖 {total['min_date']} 至 {total['max_date']}，报告币种 {code}。",
+            f"The warehouse holds {int(total['rows']):,} transaction rows from {total['min_date']} to "
+            f"{total['max_date']}, reported in {code}.",
+        ),
+        meta=trust_sentence(DEFAULT_DB_PATH),
+    )
+    gauge_strip(
+        [
+            gauge_item(tr("市场", "Markets"), len(counts["countries"]), "count", str(len(counts["countries"])), note_text=""),
+            gauge_item(tr("品类", "Categories"), len(counts["categories"]), "count", str(len(counts["categories"])), note_text=""),
+            gauge_item(tr("渠道", "Channels"), len(counts["channels"]), "count", str(len(counts["channels"])), note_text=""),
+        ],
+        key="data_hub_gauges",
+    )
+    _upload_flow(read_only, code)
+
+    section_header(tr("监听文件夹", "Watched folder"), tr("文件放入后自动导入", "Files dropped here import automatically"))
+    st.code(f"insightflow watch --interval 30\n# {INCOMING_DIR}", language="powershell")
+    left, right = st.columns(2)
+    with left:
+        if st.button(tr("立即扫描一次", "Scan once now"), disabled=read_only, width="stretch"):
             results = scan_once(DEFAULT_DB_PATH)
-            if not results:
-                st.info(f"No supported files found in {INCOMING_DIR}")
-            else:
-                st.dataframe(pd.DataFrame(results), use_container_width=True, hide_index=True)
+            if results:
+                st.dataframe(pd.DataFrame(results), hide_index=True)
                 st.cache_data.clear()
-    with live_right:
-        if st.button(t("data.refresh"), use_container_width=True):
+            else:
+                note(tr(f"{INCOMING_DIR} 中没有可导入的文件。", f"No files to import in {INCOMING_DIR}."))
+    with right:
+        if st.button(t("data.refresh"), width="stretch"):
             st.cache_data.clear()
             st.rerun()
 
-    st.subheader(t("data.history"))
+    section_header(tr("导入历史", "Import history"))
     history = query_df(
         DEFAULT_DB_PATH,
         "SELECT run_at, source_name, load_mode, inserted_rows, skipped_rows FROM etl_runs ORDER BY run_at DESC LIMIT 50",
     )
-    st.dataframe(history, use_container_width=True, hide_index=True)
+    st.dataframe(history, hide_index=True)
     st.caption(
-        f"Database version: {database_version(DEFAULT_DB_PATH)} · Data bounds: {date_bounds(DEFAULT_DB_PATH)}"
+        f"{tr('版本', 'Version')} {database_version(DEFAULT_DB_PATH)[0]} "
+        f"{tr('数据范围', 'Range')} {date_bounds(DEFAULT_DB_PATH)}"
     )

@@ -1,13 +1,34 @@
 [theme]
-base = "light"
-primaryColor = "#5267F8"
-backgroundColor = "#F5F7FB"
-secondaryBackgroundColor = "#FFFFFF"
-textColor = "#111827"
-font = "sans serif"
+base = "dark"
+primaryColor = "#38D6C4"
+backgroundColor = "#0A1F3D"
+secondaryBackgroundColor = "#0F2747"
+textColor = "#EAF4FF"
+linkColor = "#7CC4FF"
+borderColor = "#274A78"
+font = "Sora, 'HarmonyOS Sans SC', MiSans, 'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif"
+headingFont = "Sora, 'HarmonyOS Sans SC', MiSans, 'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif"
+baseRadius = "6px"
+buttonRadius = "6px"
+showWidgetBorder = true
+chartCategoricalColors = ["#3D8FE6", "#D8722A", "#14A88C", "#BC8A0C", "#D65F9E", "#55A332", "#9A7DEB", "#E25B5B"]
+
+[[theme.fontFaces]]
+family = "Sora"
+url = "app/static/fonts/sora-latin-wght-normal.woff2"
+weight = "100 800"
+
+[theme.sidebar]
+backgroundColor = "#081A34"
+secondaryBackgroundColor = "#0F2747"
+borderColor = "#1C3A63"
 
 [server]
 headless = true
+enableStaticServing = true
+
+[client]
+toolbarMode = "minimal"
 
 [browser]
 gatherUsageStats = false

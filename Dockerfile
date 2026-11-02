@@ -15,6 +15,7 @@ COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
 COPY streamlit_app.py docker-entrypoint.sh ./
 COPY .streamlit ./.streamlit
+COPY static ./static
 COPY contracts ./contracts
 COPY scripts ./scripts
 RUN pip install . && chmod +x /app/docker-entrypoint.sh

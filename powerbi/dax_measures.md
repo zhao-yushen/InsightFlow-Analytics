@@ -1,16 +1,19 @@
 # InsightFlow Power BI DAX Measure Pack
 
 ```DAX
-Net Revenue = SUM(fact_transactions[net_revenue])
-Gross Revenue = SUM(fact_transactions[gross_revenue])
-Discount Amount = SUM(fact_transactions[discount_amount])
-Gross Profit = SUM(fact_transactions[gross_profit])
-Contribution Profit = SUM(fact_transactions[contribution_profit])
+Net Revenue = CALCULATE(SUM(fact_transactions[net_revenue]), fact_transactions[data_valid] = 1)
+Gross Revenue = CALCULATE(SUM(fact_transactions[gross_revenue]), fact_transactions[sale_valid] = 1)
+Discount Amount = CALCULATE(SUM(fact_transactions[discount_amount]), fact_transactions[sale_valid] = 1)
+Refunds = CALCULATE(-SUM(fact_transactions[net_revenue]), fact_transactions[data_valid] = 1, fact_transactions[is_cancellation] = 1)
+Gross Profit = CALCULATE(SUM(fact_transactions[gross_profit]), fact_transactions[data_valid] = 1)
+Contribution Profit = CALCULATE(SUM(fact_transactions[contribution_profit]), fact_transactions[data_valid] = 1)
 Gross Margin = DIVIDE([Gross Profit], [Net Revenue])
 Contribution Margin = DIVIDE([Contribution Profit], [Net Revenue])
-Orders = DISTINCTCOUNT(fact_transactions[invoice_no])
-Active Customers = DISTINCTCOUNT(fact_transactions[customer_id])
-Units = SUM(fact_transactions[quantity])
+Orders = CALCULATE(DISTINCTCOUNT(fact_transactions[invoice_no]), fact_transactions[sale_valid] = 1)
+Return Orders = CALCULATE(DISTINCTCOUNT(fact_transactions[invoice_no]), fact_transactions[data_valid] = 1, fact_transactions[is_cancellation] = 1)
+Return Rate = DIVIDE([Return Orders], [Orders])
+Active Customers = CALCULATE(DISTINCTCOUNT(fact_transactions[customer_id]), fact_transactions[sale_valid] = 1)
+Units = CALCULATE(SUM(fact_transactions[quantity]), fact_transactions[sale_valid] = 1)
 Average Order Value = DIVIDE([Net Revenue], [Orders])
 Revenue MoM =
 VAR PreviousMonth = CALCULATE([Net Revenue], DATEADD(dim_date[date], -1, MONTH))
@@ -27,4 +30,4 @@ VAR Control = CALCULATE(AVERAGE(experiment_assignments[contribution_profit]), ex
 RETURN Treatment - Control
 ```
 
-The report should show `data_status` and `confidence` from `metric_catalog` near financial KPIs so estimated or simulated values cannot be mistaken for audited company values.
+Reversal lines carry negative amounts, so net revenue and profit are already after returns. The report should show `data_status` and `confidence` from `metric_catalog` near financial KPIs so estimated or simulated values cannot be mistaken for audited company values.

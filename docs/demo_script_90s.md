@@ -1,25 +1,25 @@
-# 90-second Recruiter Demo Script
+# 90-second Demo Script
 
-## 0–12 seconds — Business problem
+## 0 to 12 seconds: the problem
 
-“Revenue alone can hide deteriorating profit. InsightFlow connects transaction, cost, customer, inventory, target and experiment data to explain what changed and what action is safest.”
+"Revenue alone can hide falling profit. InsightFlow shows where the money goes, then tests a decision before you make it."
 
-## 12–28 seconds — Executive overview
+## 12 to 30 seconds: the money river
 
-Show Net Revenue, Contribution Profit and target status. Point to the visible data-status banner so the viewer can distinguish verified, estimated and simulated values.
+Open Executive Overview. Follow the river from gross sales to contribution profit. Each branch is money leaving, and its width is the amount. Point out the sentence at the top and the line stating that the data is simulated.
 
-## 28–45 seconds — Root cause
+## 30 to 45 seconds: why profit changed
 
-Open Profit Diagnosis. Show that contribution profit fell even when revenue held up. Use the profit bridge to identify gross-margin and logistics pressure.
+Open Profitability. Walk the price-volume-mix bridge from last period's profit to this period's. Note that the unexplained amount is zero.
 
-## 45–62 seconds — Decision uncertainty
+## 45 to 65 seconds: test a decision
 
-Open the probabilistic Decision Lab. Compare a pricing or discount scenario. Show median profit change, 90% interval, probability of improvement and “revenue up, profit down” risk.
+Open the Decision Lab and raise the discount. Watch the simulated outcomes fall into place, and read the chance of improving profit and of revenue rising while profit falls. Then open Plan search to see the best plan within your risk limits.
 
-## 62–75 seconds — Experiment guardrail
+## 65 to 78 seconds: prove it
 
-Open the blanket-discount experiment. Show that conversion and revenue improve while contribution profit falls, so the system blocks a full rollout.
+Open the A/B page. Show the three experiments: one worth shipping, one that grows revenue while destroying profit, and one with too little evidence to call.
 
-## 75–90 seconds — Trust and delivery
+## 78 to 90 seconds: trust
 
-Open Trust Center. Show data contracts, provenance and fault injection. Finish with the downloadable action register and Word/HTML management report.
+Open the Trust Center. Show that a metric is rated by its weakest input and that the churn model states its out-of-time score. Finish by downloading the report.

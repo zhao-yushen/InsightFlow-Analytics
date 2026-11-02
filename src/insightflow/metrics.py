@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from .warehouse import query_df
+from .churn import score_customers, train_churn_model
+from .geography import market_coordinates, market_region
+from .warehouse import LEDGER_AGGREGATES, query_df
 
 
 @dataclass(frozen=True)
@@ -18,8 +20,12 @@ class FilterSpec:
     channels: tuple[str, ...] = ()
     regions: tuple[str, ...] = ()
 
+    def undated(self) -> FilterSpec:
+        """Keep the business scope but open the time window, for history-based models."""
+        return replace(self, start_date=None, end_date=None)
 
-def _where(filters: FilterSpec, alias: str = "") -> tuple[str, list]:
+
+def filter_clause(filters: FilterSpec, alias: str = "") -> tuple[str, list]:
     prefix = f"{alias}." if alias else ""
     clauses = ["1=1"]
     params: list = []
@@ -108,7 +114,7 @@ def filter_dimension_counts(
         categories=() if dimension == "category" else filters.categories,
         channels=() if dimension == "channel" else filters.channels,
     )
-    where, params = _where(scoped)
+    where, params = filter_clause(scoped)
     frame = query_df(
         db_path,
         f"""
@@ -125,7 +131,7 @@ def filter_dimension_counts(
 
 def filter_coverage(db_path: str | Path, filters: FilterSpec) -> dict[str, object]:
     """Summarize how much valid sales data survives the current filter intersection."""
-    where, params = _where(filters)
+    where, params = filter_clause(filters)
     frame = query_df(
         db_path,
         f"""
@@ -157,38 +163,9 @@ def date_bounds(db_path: str | Path) -> tuple[str, str]:
 
 
 def kpi_summary(db_path: str | Path, filters: FilterSpec) -> dict[str, float]:
-    where, params = _where(filters)
-    sales = query_df(
-        db_path,
-        f"""
-        SELECT COALESCE(SUM(gross_revenue), 0) AS gross_revenue,
-               COALESCE(SUM(discount_amount), 0) AS discount_amount,
-               COALESCE(SUM(net_revenue), 0) AS revenue,
-               COALESCE(SUM(cogs), 0) AS cogs,
-               COALESCE(SUM(gross_profit), 0) AS gross_profit,
-               COALESCE(SUM(contribution_profit), 0) AS contribution_profit,
-               COALESCE(SUM(shipping_cost), 0) AS shipping_cost,
-               COALESCE(SUM(payment_fee), 0) AS payment_fee,
-               COALESCE(SUM(marketing_cost), 0) AS marketing_cost,
-               COUNT(DISTINCT invoice_no) AS orders,
-               COUNT(DISTINCT customer_id) AS active_customers,
-               COALESCE(SUM(quantity), 0) AS units
-        FROM v_sales
-        WHERE {where}
-        """,
-        params,
-    ).iloc[0]
-
-    cancellations = query_df(
-        db_path,
-        f"""
-        SELECT COUNT(DISTINCT CASE WHEN is_cancellation=1 AND data_valid=1 THEN invoice_no END) AS cancelled_orders,
-               COUNT(DISTINCT CASE WHEN data_valid=1 THEN invoice_no END) AS all_orders,
-               COALESCE(SUM(CASE WHEN is_cancellation=1 AND data_valid=1 THEN return_loss ELSE 0 END),0) AS return_loss
-        FROM fact_transactions
-        WHERE {where}
-        """,
-        params,
+    where, params = filter_clause(filters)
+    ledger = query_df(
+        db_path, f"SELECT {LEDGER_AGGREGATES} FROM v_ledger WHERE {where}", params
     ).iloc[0]
 
     repeat = query_df(
@@ -206,66 +183,48 @@ def kpi_summary(db_path: str | Path, filters: FilterSpec) -> dict[str, float]:
         params,
     ).iloc[0, 0]
 
-    orders = float(sales["orders"] or 0)
-    customers = float(sales["active_customers"] or 0)
-    revenue = float(sales["revenue"] or 0)
-    gross_revenue = float(sales["gross_revenue"] or 0)
-    gross_profit = float(sales["gross_profit"] or 0)
-    contribution_profit = float(sales["contribution_profit"] or 0)
-    all_orders = float(cancellations["all_orders"] or 0)
+    values = {key: float(ledger[key] or 0) for key in ledger.index}
+    orders = values["orders"]
+    customers = values["active_customers"]
+    revenue = values["revenue"]
+    gross_revenue = values["gross_revenue"]
+    gross_profit = values["gross_profit"]
+    contribution_profit = values["contribution_profit"]
     return {
-        "gross_revenue": gross_revenue,
-        "discount_amount": float(sales["discount_amount"] or 0),
-        "discount_rate": float(sales["discount_amount"] or 0) / gross_revenue
-        if gross_revenue
-        else 0.0,
-        "revenue": revenue,
-        "cogs": float(sales["cogs"] or 0),
-        "gross_profit": gross_profit,
+        **values,
+        "discount_rate": values["discount_amount"] / gross_revenue if gross_revenue else 0.0,
         "gross_margin": gross_profit / revenue if revenue else 0.0,
-        "contribution_profit": contribution_profit,
         "contribution_margin": contribution_profit / revenue if revenue else 0.0,
-        "shipping_cost": float(sales["shipping_cost"] or 0),
-        "payment_fee": float(sales["payment_fee"] or 0),
-        "marketing_cost": float(sales["marketing_cost"] or 0),
-        "return_loss": float(cancellations["return_loss"] or 0),
-        "orders": orders,
-        "active_customers": customers,
-        "units": float(sales["units"] or 0),
         "average_order_value": revenue / orders if orders else 0.0,
         "profit_per_order": contribution_profit / orders if orders else 0.0,
         "profit_per_customer": contribution_profit / customers if customers else 0.0,
         "purchase_frequency": orders / customers if customers else 0.0,
         "repeat_rate": float(repeat or 0),
-        "cancellation_rate": float(cancellations["cancelled_orders"] or 0) / all_orders
-        if all_orders
-        else 0.0,
+        "cancellation_rate": values["cancelled_orders"] / orders if orders else 0.0,
+        "return_rate_value": values["returns_value"] / gross_revenue if gross_revenue else 0.0,
     }
 
 
+_RATIOS = """
+    SUM(net_revenue) / NULLIF(COUNT(DISTINCT CASE WHEN sale_valid=1 THEN invoice_no END), 0)
+        AS average_order_value,
+    SUM(gross_profit) / NULLIF(SUM(net_revenue), 0) AS gross_margin,
+    SUM(contribution_profit) / NULLIF(SUM(net_revenue), 0) AS contribution_margin,
+    SUM(CASE WHEN sale_valid=1 THEN discount_amount END)
+        / NULLIF(SUM(CASE WHEN sale_valid=1 THEN gross_revenue END), 0) AS discount_rate,
+    COUNT(DISTINCT CASE WHEN is_cancellation=1 THEN invoice_no END) * 1.0
+        / NULLIF(COUNT(DISTINCT CASE WHEN sale_valid=1 THEN invoice_no END), 0)
+        AS cancellation_rate
+"""
+
+
 def monthly_trend(db_path: str | Path, filters: FilterSpec) -> pd.DataFrame:
-    where, params = _where(filters)
+    where, params = filter_clause(filters)
     return query_df(
         db_path,
         f"""
-        SELECT month,
-               SUM(gross_revenue) AS gross_revenue,
-               SUM(discount_amount) AS discount_amount,
-               SUM(net_revenue) AS revenue,
-               SUM(cogs) AS cogs,
-               SUM(gross_profit) AS gross_profit,
-               SUM(contribution_profit) AS contribution_profit,
-               SUM(shipping_cost) AS shipping_cost,
-               SUM(payment_fee) AS payment_fee,
-               SUM(marketing_cost) AS marketing_cost,
-               COUNT(DISTINCT invoice_no) AS orders,
-               COUNT(DISTINCT customer_id) AS active_customers,
-               SUM(quantity) AS units,
-               SUM(net_revenue) / NULLIF(COUNT(DISTINCT invoice_no), 0) AS average_order_value,
-               SUM(gross_profit) / NULLIF(SUM(net_revenue), 0) AS gross_margin,
-               SUM(contribution_profit) / NULLIF(SUM(net_revenue), 0) AS contribution_margin,
-               SUM(discount_amount) / NULLIF(SUM(gross_revenue), 0) AS discount_rate
-        FROM v_sales
+        SELECT month, {LEDGER_AGGREGATES}, {_RATIOS}
+        FROM v_ledger
         WHERE {where}
         GROUP BY month
         ORDER BY month
@@ -280,27 +239,24 @@ def dimension_performance(
     dimension: str,
     limit: int = 20,
 ) -> pd.DataFrame:
-    allowed = {"country", "category", "channel", "stock_code", "description", "supplier"}
+    allowed = {
+        "country",
+        "market_region",
+        "category",
+        "channel",
+        "stock_code",
+        "description",
+        "supplier",
+    }
     if dimension not in allowed:
         raise ValueError(f"不允许的维度: {dimension}")
-    where, params = _where(filters)
+    where, params = filter_clause(filters)
     return query_df(
         db_path,
         f"""
-        SELECT {dimension},
-               SUM(gross_revenue) AS gross_revenue,
-               SUM(discount_amount) AS discount_amount,
-               SUM(net_revenue) AS revenue,
-               SUM(cogs) AS cogs,
-               SUM(gross_profit) AS gross_profit,
-               SUM(contribution_profit) AS contribution_profit,
-               SUM(gross_profit) / NULLIF(SUM(net_revenue),0) AS gross_margin,
-               SUM(contribution_profit) / NULLIF(SUM(net_revenue),0) AS contribution_margin,
-               COUNT(DISTINCT invoice_no) AS orders,
-               COUNT(DISTINCT customer_id) AS customers,
-               SUM(quantity) AS units,
-               SUM(net_revenue) / NULLIF(COUNT(DISTINCT invoice_no), 0) AS average_order_value
-        FROM v_sales
+        SELECT {dimension}, {LEDGER_AGGREGATES}, {_RATIOS},
+               COUNT(DISTINCT CASE WHEN sale_valid=1 THEN customer_id END) AS customers
+        FROM v_ledger
         WHERE {where}
         GROUP BY {dimension}
         ORDER BY revenue DESC
@@ -310,25 +266,61 @@ def dimension_performance(
     )
 
 
+def market_performance(db_path: str | Path, filters: FilterSpec) -> pd.DataFrame:
+    """Country results with coordinates and region, ready for the market globe."""
+    frame = dimension_performance(db_path, filters, "country", limit=500)
+    if frame.empty:
+        return frame
+    frame["market_region"] = frame["country"].map(market_region)
+    coordinates = frame["country"].map(market_coordinates)
+    frame["lat"] = coordinates.map(lambda point: point[0] if point else np.nan)
+    frame["lon"] = coordinates.map(lambda point: point[1] if point else np.nan)
+    total = float(frame["revenue"].sum()) or 1.0
+    frame["revenue_share"] = frame["revenue"] / total
+    return frame
+
+
+def weekday_pattern(db_path: str | Path, filters: FilterSpec) -> pd.DataFrame:
+    """Net revenue by month and weekday, with 0 meaning Sunday as SQLite counts it."""
+    where, params = filter_clause(filters)
+    frame = query_df(
+        db_path,
+        f"""
+        SELECT month, CAST(STRFTIME('%w', date) AS INTEGER) AS weekday,
+               SUM(net_revenue) AS revenue
+        FROM v_ledger
+        WHERE {where}
+        GROUP BY month, weekday
+        """,
+        params,
+    )
+    if frame.empty:
+        return frame
+    grid = frame.pivot(index="month", columns="weekday", values="revenue").fillna(0.0)
+    return grid.reindex(columns=[1, 2, 3, 4, 5, 6, 0], fill_value=0.0).sort_index()
+
+
 def product_profitability(
     db_path: str | Path, filters: FilterSpec, limit: int = 100
 ) -> pd.DataFrame:
-    where, params = _where(filters)
+    where, params = filter_clause(filters)
     return query_df(
         db_path,
         f"""
         SELECT stock_code,
                MAX(description) AS description,
                MAX(category) AS category,
-               SUM(net_revenue) AS revenue,
-               SUM(gross_profit) AS gross_profit,
-               SUM(contribution_profit) AS contribution_profit,
+               COALESCE(SUM(net_revenue), 0) AS revenue,
+               COALESCE(SUM(gross_profit), 0) AS gross_profit,
+               COALESCE(SUM(contribution_profit), 0) AS contribution_profit,
                SUM(gross_profit) / NULLIF(SUM(net_revenue),0) AS gross_margin,
                SUM(contribution_profit) / NULLIF(SUM(net_revenue),0) AS contribution_margin,
-               SUM(discount_amount) / NULLIF(SUM(gross_revenue),0) AS discount_rate,
-               SUM(quantity) AS units,
-               COUNT(DISTINCT invoice_no) AS orders
-        FROM v_sales
+               SUM(CASE WHEN sale_valid=1 THEN discount_amount END)
+                   / NULLIF(SUM(CASE WHEN sale_valid=1 THEN gross_revenue END),0) AS discount_rate,
+               COALESCE(-SUM(CASE WHEN is_cancellation=1 THEN net_revenue END), 0) AS returns_value,
+               COALESCE(SUM(CASE WHEN sale_valid=1 THEN quantity END), 0) AS units,
+               COUNT(DISTINCT CASE WHEN sale_valid=1 THEN invoice_no END) AS orders
+        FROM v_ledger
         WHERE {where}
         GROUP BY stock_code
         ORDER BY revenue DESC
@@ -344,10 +336,12 @@ def cost_waterfall(db_path: str | Path, filters: FilterSpec) -> pd.DataFrame:
         [
             ("商品毛额", kpi["gross_revenue"]),
             ("折扣", -kpi["discount_amount"]),
+            ("退款", -kpi["returns_value"]),
             ("商品成本", -kpi["cogs"]),
             ("物流成本", -kpi["shipping_cost"]),
             ("支付手续费", -kpi["payment_fee"]),
             ("营销费用", -kpi["marketing_cost"]),
+            ("退货处理", -kpi["return_processing_cost"]),
             ("贡献利润", kpi["contribution_profit"]),
         ],
         columns=["component", "value"],
@@ -355,20 +349,21 @@ def cost_waterfall(db_path: str | Path, filters: FilterSpec) -> pd.DataFrame:
 
 
 def rfm_segments(db_path: str | Path, filters: FilterSpec) -> pd.DataFrame:
-    where, params = _where(filters)
+    where, params = filter_clause(filters)
     data = query_df(
         db_path,
         f"""
         SELECT customer_id,
-               MAX(date) AS last_purchase_date,
-               COUNT(DISTINCT invoice_no) AS frequency,
+               MAX(CASE WHEN sale_valid=1 THEN date END) AS last_purchase_date,
+               COUNT(DISTINCT CASE WHEN sale_valid=1 THEN invoice_no END) AS frequency,
                SUM(net_revenue) AS monetary,
                SUM(contribution_profit) AS contribution_profit,
-               AVG(discount_rate) AS avg_discount_rate,
-               AVG(net_revenue) AS avg_line_revenue
-        FROM v_sales
+               AVG(CASE WHEN sale_valid=1 THEN discount_rate END) AS avg_discount_rate,
+               AVG(CASE WHEN sale_valid=1 THEN net_revenue END) AS avg_line_revenue
+        FROM v_ledger
         WHERE {where} AND customer_id IS NOT NULL
         GROUP BY customer_id
+        HAVING frequency > 0
         """,
         params,
     )
@@ -422,6 +417,13 @@ def customer_value_risk(db_path: str | Path, filters: FilterSpec) -> pd.DataFram
         + 0.15 * discount_dependency
         + 0.10 * negative_profit
     ).clip(0, 1)
+    data["risk_basis"] = "rule"
+    model = train_churn_model(db_path)
+    if model is not None and model.useful:
+        scored = score_customers(db_path).set_index("customer_id")["model_churn_risk"]
+        modelled = data["customer_id"].map(scored)
+        data["churn_risk"] = modelled.fillna(data["churn_risk"])
+        data.loc[modelled.notna(), "risk_basis"] = "model"
     expected_months = (12 * (1 - data["churn_risk"])).clip(1, 12)
     monthly_profit = data["contribution_profit"] / max(
         (pd.Timestamp(filters.end_date) - pd.Timestamp(filters.start_date)).days / 30.4
@@ -444,7 +446,7 @@ def customer_value_risk(db_path: str | Path, filters: FilterSpec) -> pd.DataFram
 
 
 def cohort_retention(db_path: str | Path, filters: FilterSpec) -> pd.DataFrame:
-    where, params = _where(filters)
+    where, params = filter_clause(filters)
     sales = query_df(
         db_path,
         f"""
@@ -539,18 +541,7 @@ def target_status(db_path: str | Path, month: str | None = None) -> pd.DataFrame
         "net_revenue": float(row["revenue"]),
         "contribution_profit": float(row["contribution_profit"]),
         "gross_margin": float(row["gross_margin"]),
-        "cancellation_rate": float(
-            query_df(
-                db_path,
-                """
-                SELECT COUNT(DISTINCT CASE WHEN is_cancellation=1 AND data_valid=1 THEN invoice_no END) * 1.0 /
-                       NULLIF(COUNT(DISTINCT CASE WHEN data_valid=1 THEN invoice_no END),0) rate
-                FROM fact_transactions WHERE month=?
-                """,
-                (month,),
-            ).iloc[0, 0]
-            or 0
-        ),
+        "cancellation_rate": float(row["cancellation_rate"] or 0),
     }
     out = targets.copy()
     out["actual_value"] = out["metric_id"].map(actual_map)

@@ -1,11 +1,13 @@
 # Data Profiles and Trust Labels
 
-InsightFlow separates software capability from data truth. Every loaded warehouse records three independent statuses:
+InsightFlow separates software capability from data truth. Every line records independent transaction, discount, economic and inventory statuses:
 
 - **Verified**: supplied by the source and checked by deterministic validation rules.
 - **Estimated**: derived from a documented rule because the source lacks the field.
 - **Simulated**: generated only for demonstration, testing or scenario planning.
-- **Mixed**: the displayed metric combines more than one status.
+- **Mixed**: the warehouse holds lines with different statuses, for example a demo warehouse with real rows appended.
+
+A metric takes the status of its weakest input, and its confidence is weighted by rows. Net revenue reads as Estimated when the source has no discount field.
 
 ## Included profiles
 

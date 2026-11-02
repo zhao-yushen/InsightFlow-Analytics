@@ -8,9 +8,19 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .config import DEFAULT_CONTRACT_PATH
-from .data_contracts import contract_score, load_contract, validate_contract
+from .config import DEFAULT_CONTRACT_PATH, DEFAULT_CURRENCY, RETURN_RECOVERY_RATE
+from .currency import PROFILE_CURRENCY, normalize_code
+from .data_contracts import ContractIssue, contract_score, load_contract, validate_contract
 from .geography import canonical_country, market_region, shipping_multiplier
+from .ingest import (
+    EXCEL_SUFFIXES,
+    SUPPORTED_SUFFIXES,
+    canonical_field,
+    parse_datetime,
+    parse_number,
+    parse_rate,
+    read_table,
+)
 
 REQUIRED_COLUMNS = [
     "invoice_no",
@@ -46,30 +56,21 @@ OPTIONAL_ECONOMIC_COLUMNS = [
     "supplier_lead_days",
     "inventory_on_hand",
     "reorder_point",
+    "currency",
 ]
 CANONICAL_COLUMNS = BASE_COLUMNS + OPTIONAL_ECONOMIC_COLUMNS
-
-COLUMN_ALIASES = {
-    "Invoice": "invoice_no",
-    "InvoiceNo": "invoice_no",
-    "StockCode": "stock_code",
-    "Description": "description",
-    "Quantity": "quantity",
-    "InvoiceDate": "invoice_date",
-    "Price": "unit_price",
-    "UnitPrice": "unit_price",
-    "Customer ID": "customer_id",
-    "CustomerID": "customer_id",
-    "Country": "country",
-    "Category": "category",
-    "Channel": "channel",
-    "DiscountRate": "discount_rate",
-    "UnitCost": "unit_cost",
-    "ShippingCost": "shipping_cost",
-    "PaymentFee": "payment_fee",
-    "MarketingCost": "marketing_cost",
-    "ReturnProcessingCost": "return_processing_cost",
-}
+# A line's economics are Verified only when each of these came from the source. A sale
+# line carries no return handling, so that input is only expected on reversal lines.
+PROFIT_INPUTS = ("discount_rate", "unit_cost", "shipping_cost", "payment_fee", "marketing_cost")
+INVENTORY_INPUTS = ("supplier", "supplier_lead_days", "inventory_on_hand", "reorder_point")
+MONEY_INPUTS = (
+    "unit_price",
+    "unit_cost",
+    "shipping_cost",
+    "payment_fee",
+    "marketing_cost",
+    "return_processing_cost",
+)
 
 CATEGORY_COST_RATIO = {
     "Home Decor": 0.48,
@@ -103,6 +104,9 @@ CATEGORY_ELASTICITY = {
 }
 
 
+SCHEMA_VERSION = "5.0"
+
+
 @dataclass
 class ETLResult:
     curated: pd.DataFrame
@@ -117,8 +121,12 @@ def _stable_fraction(value: str, salt: str = "") -> float:
     return int(digest[:12], 16) / float(16**12 - 1)
 
 
+def _canonical_name(column: object) -> object:
+    return canonical_field(column) or column
+
+
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    canonical_names = [COLUMN_ALIASES.get(column, column) for column in df.columns]
+    canonical_names = [_canonical_name(column) for column in df.columns]
     duplicated = pd.Index(canonical_names)[pd.Index(canonical_names).duplicated()].unique().tolist()
     if duplicated:
         raise ValueError(
@@ -147,6 +155,7 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
         "supplier_lead_days": pd.NA,
         "inventory_on_hand": pd.NA,
         "reorder_point": pd.NA,
+        "currency": pd.NA,
     }
     for column, default in defaults.items():
         if column not in renamed:
@@ -155,7 +164,14 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _fill_product_economics(work: pd.DataFrame) -> pd.DataFrame:
+    """Fill absent economic inputs with documented rules.
+
+    A reversal line undoes an earlier sale, so the shipping, payment and marketing money
+    spent on that sale stays spent: rules derive no new costs for it, and only return
+    handling is added. Values the source did supply are always kept.
+    """
     work = work.copy()
+    is_cancel = work["quantity"] < 0
     product_keys = work["stock_code"].fillna("UNKNOWN").astype(str)
     median_price_by_product = (
         work.groupby("stock_code")["unit_price"]
@@ -207,7 +223,7 @@ def _fill_product_economics(work: pd.DataFrame) -> pd.DataFrame:
     )
     derived_shipping = (1.15 + 0.16 * abs_qty) * country_mult * channel_shipping
     work["shipping_cost"] = pd.to_numeric(work["shipping_cost"], errors="coerce").fillna(
-        derived_shipping
+        derived_shipping.where(~is_cancel, 0.0)
     )
 
     payment_rate = (
@@ -240,15 +256,12 @@ def _fill_product_economics(work: pd.DataFrame) -> pd.DataFrame:
     )
     discounted_value = gross_value * (1 - work["discount_rate"])
     work["payment_fee"] = pd.to_numeric(work["payment_fee"], errors="coerce").fillna(
-        discounted_value * payment_rate
+        (discounted_value * payment_rate).where(~is_cancel, 0.0)
     )
     work["marketing_cost"] = pd.to_numeric(work["marketing_cost"], errors="coerce").fillna(
-        gross_value * marketing_rate
+        (gross_value * marketing_rate).where(~is_cancel, 0.0)
     )
 
-    is_cancel = work["invoice_no"].astype("string").str.upper().str.startswith("C", na=False) | (
-        work["quantity"] < 0
-    )
     derived_return = product_keys.map(lambda x: 2.0 + 4.5 * _stable_fraction(x, "return"))
     work["return_processing_cost"] = pd.to_numeric(
         work["return_processing_cost"], errors="coerce"
@@ -328,36 +341,50 @@ def _quality_dimensions(
     return out
 
 
+def _dataset_status(statuses: pd.Series) -> str:
+    values = statuses.dropna().unique().tolist()
+    return str(values[0]) if len(values) == 1 else "Mixed"
+
+
+def _convert_currency(
+    work: pd.DataFrame, reporting: str, fx_rates: dict[str, float] | None
+) -> tuple[pd.DataFrame, list[ContractIssue]]:
+    """Express money in the reporting currency; refuse amounts with no stated rate."""
+    codes = work["currency"].map(lambda code: normalize_code(code, reporting))
+    known = {code.upper(): float(rate) for code, rate in (fx_rates or {}).items()}
+    known[reporting] = 1.0
+    rates = codes.map(known)
+    unknown = rates.isna()
+    issues: list[ContractIssue] = []
+    if unknown.any():
+        listed = ", ".join(sorted(codes[unknown].unique()))
+        message = f"{listed} 无法折算为 {reporting}，请提供汇率"
+        issues.append(
+            ContractIssue("P0", "fx_rate_missing", "currency", int(unknown.sum()), message)
+        )
+    rate = rates.fillna(1.0)
+    for column in MONEY_INPUTS:
+        work[column] = work[column] * rate
+    work["currency"] = reporting
+    work["fx_rate"] = rate
+    return work, issues
+
+
 def clean_transactions(
     df: pd.DataFrame,
     *,
     source_profile: str = "manual_import",
     transaction_status: str | None = None,
+    currency: str | None = None,
+    fx_rates: dict[str, float] | None = None,
 ) -> ETLResult:
-    aliased_columns = {COLUMN_ALIASES.get(column, column) for column in df.columns}
     transaction_status = transaction_status or (
         "Simulated"
         if source_profile.startswith("demo") or source_profile.startswith("multitable_demo")
         else "Verified"
     )
-    economic_inputs = {
-        "discount_rate",
-        "unit_cost",
-        "shipping_cost",
-        "payment_fee",
-        "marketing_cost",
-        "return_processing_cost",
-        "price_elasticity",
-    }
-    inventory_inputs = {"supplier", "supplier_lead_days", "inventory_on_hand", "reorder_point"}
-    if transaction_status == "Simulated":
-        economic_status = "Simulated"
-        inventory_status = "Simulated"
-    else:
-        economic_status = "Verified" if economic_inputs.issubset(aliased_columns) else "Estimated"
-        inventory_status = "Verified" if inventory_inputs.issubset(aliased_columns) else "Simulated"
-    data_mode = (
-        transaction_status if transaction_status == economic_status == inventory_status else "Mixed"
+    reporting_currency = normalize_code(
+        currency or PROFILE_CURRENCY.get(source_profile, DEFAULT_CURRENCY)
     )
 
     raw = normalize_columns(df)
@@ -379,11 +406,16 @@ def clean_transactions(
     work["country"] = work["country"].fillna("Unknown").map(canonical_country).astype("string")
     work["market_region"] = work["country"].map(market_region).astype("string")
     work["channel"] = work["channel"].fillna("Unknown").astype("string").str.strip().str.title()
-    work["invoice_date"] = pd.to_datetime(work["invoice_date"], errors="coerce")
-    work["quantity"] = pd.to_numeric(work["quantity"], errors="coerce")
-    work["unit_price"] = pd.to_numeric(work["unit_price"], errors="coerce")
+    work["invoice_date"] = parse_datetime(work["invoice_date"])
+    work["quantity"] = parse_number(work["quantity"])
+    for column in MONEY_INPUTS:
+        work[column] = parse_number(work[column])
+    work["discount_rate"] = parse_rate(work["discount_rate"])
     customer_raw = work["customer_id"]
-    work["customer_id"] = customer_raw.astype("string").str.strip()
+    # Spreadsheet readers turn numeric identifiers into 17850.0; keep the original key.
+    work["customer_id"] = (
+        customer_raw.astype("string").str.strip().str.replace(r"\.0$", "", regex=True)
+    )
     invalid_customer_tokens = work["customer_id"].str.lower().isin({"", "nan", "none", "<na>"})
     work.loc[customer_raw.isna() | invalid_customer_tokens, "customer_id"] = pd.NA
 
@@ -391,36 +423,60 @@ def clean_transactions(
     invalid_quantity = work["quantity"].isna() | (work["quantity"] == 0)
     invalid_price = work["unit_price"].isna() | (work["unit_price"] <= 0)
     missing_customer = work["customer_id"].isna()
+    work["is_cancellation"] = (work["quantity"] < 0).fillna(False)
+
+    work, currency_issues = _convert_currency(work, reporting_currency, fx_rates)
+
+    # The contract judges the values the source actually sent. Rule-based filling and
+    # clipping happen afterwards, so they can never hide an out-of-range input.
+    contract = load_contract(DEFAULT_CONTRACT_PATH)
+    contract_issues = validate_contract(work, contract)
+    if currency_issues:
+        extra = pd.DataFrame([issue.__dict__ for issue in currency_issues])
+        kept = contract_issues.loc[contract_issues["severity"] != "PASS"]
+        contract_issues = pd.concat([extra, kept], ignore_index=True)
+
+    economics_supplied = work[list(PROFIT_INPUTS)].notna().all(axis=1) & (
+        work["return_processing_cost"].notna() | ~work["is_cancellation"]
+    )
+    discount_supplied = work["discount_rate"].notna()
+    inventory_supplied = work[list(INVENTORY_INPUTS)].notna().all(axis=1)
 
     work = _fill_product_economics(work)
     work["source_profile"] = source_profile
-    work["data_mode"] = data_mode
     work["transaction_data_status"] = transaction_status
-    work["economic_data_status"] = economic_status
-    work["inventory_data_status"] = inventory_status
-
-    contract = load_contract(DEFAULT_CONTRACT_PATH)
-    contract_issues = validate_contract(work, contract)
-    work["is_cancellation"] = work["invoice_no"].str.upper().str.startswith("C", na=False) | (
-        work["quantity"] < 0
+    if transaction_status == "Simulated":
+        work["economic_data_status"] = "Simulated"
+        work["discount_data_status"] = "Simulated"
+        work["inventory_data_status"] = "Simulated"
+    else:
+        work["economic_data_status"] = np.where(economics_supplied, "Verified", "Estimated")
+        work["discount_data_status"] = np.where(discount_supplied, "Verified", "Estimated")
+        work["inventory_data_status"] = np.where(inventory_supplied, "Verified", "Simulated")
+    economic_status = _dataset_status(work["economic_data_status"])
+    discount_status = _dataset_status(work["discount_data_status"])
+    inventory_status = _dataset_status(work["inventory_data_status"])
+    data_mode = (
+        transaction_status if transaction_status == economic_status == inventory_status else "Mixed"
     )
-    abs_quantity = work["quantity"].abs()
-    sign = np.where(work["quantity"] < 0, -1.0, 1.0)
-    work["gross_revenue"] = abs_quantity * work["unit_price"]
-    work["discount_amount"] = work["gross_revenue"] * work["discount_rate"]
-    work["net_revenue"] = sign * (work["gross_revenue"] - work["discount_amount"])
-    work["cogs"] = abs_quantity * work["unit_cost"]
-    work["gross_profit"] = work["net_revenue"] - work["cogs"]
+    work["data_mode"] = data_mode
+
+    # Signed line economics: a reversal is the mirror image of the sale it undoes, so any
+    # SUM over sales and reversals together yields the result after returns.
+    recovered = np.where(work["is_cancellation"], RETURN_RECOVERY_RATE, 1.0)
+    work["gross_revenue"] = (work["quantity"] * work["unit_price"]).round(2)
+    work["discount_amount"] = (work["gross_revenue"] * work["discount_rate"]).round(2)
+    work["net_revenue"] = (work["gross_revenue"] - work["discount_amount"]).round(2)
+    work["cogs"] = (work["quantity"] * work["unit_cost"] * recovered).round(2)
+    work["gross_profit"] = (work["net_revenue"] - work["cogs"]).round(2)
     work["operating_variable_cost"] = (
         work["shipping_cost"]
         + work["payment_fee"]
         + work["marketing_cost"]
         + work["return_processing_cost"]
-    )
-    work["contribution_profit"] = work["gross_profit"] - work["operating_variable_cost"]
-    work["return_loss"] = np.where(
-        work["is_cancellation"], work["net_revenue"].abs() + work["return_processing_cost"], 0.0
-    )
+    ).round(2)
+    work["contribution_profit"] = (work["gross_profit"] - work["operating_variable_cost"]).round(2)
+    work["return_loss"] = np.where(work["is_cancellation"], -work["contribution_profit"], 0.0)
     work["line_value"] = work["gross_revenue"]
     work["data_valid"] = ~(invalid_date | invalid_quantity | invalid_price)
     work["sale_valid"] = work["data_valid"] & ~work["is_cancellation"] & (work["quantity"] > 0)
@@ -434,18 +490,6 @@ def clean_transactions(
         .astype("uint64")
         .astype("string")
     )
-
-    currency_columns = [
-        "gross_revenue",
-        "discount_amount",
-        "net_revenue",
-        "cogs",
-        "gross_profit",
-        "operating_variable_cost",
-        "contribution_profit",
-        "return_loss",
-    ]
-    work[currency_columns] = work[currency_columns].round(2)
 
     quality_rows = [
         ("raw_rows", initial_rows, "原始行数"),
@@ -485,12 +529,14 @@ def clean_transactions(
         "date_min": work["invoice_date"].min(),
         "date_max": work["invoice_date"].max(),
         "quality_score": float(dimensions["score_100"].mean()),
-        "schema_version": "4.1",
+        "schema_version": SCHEMA_VERSION,
         "source_profile": source_profile,
         "data_mode": data_mode,
         "transaction_status": transaction_status,
         "economic_status": economic_status,
+        "discount_status": discount_status,
         "inventory_status": inventory_status,
+        "currency": reporting_currency,
         "contract_id": contract.get("contract_id", "unknown"),
         "contract_issue_count": int((contract_issues["severity"] != "PASS").sum()),
     }
@@ -519,7 +565,7 @@ def read_excel_transactions(source) -> pd.DataFrame:
     diagnostics: list[str] = []
     for sheet in ordered:
         preview = pd.read_excel(workbook, sheet_name=sheet, nrows=5)
-        canonical = {COLUMN_ALIASES.get(column, column) for column in preview.columns}
+        canonical = {_canonical_name(column) for column in preview.columns}
         missing = [column for column in REQUIRED_COLUMNS if column not in canonical]
         if not missing:
             return pd.read_excel(workbook, sheet_name=sheet)
@@ -535,10 +581,8 @@ def read_excel_transactions(source) -> pd.DataFrame:
 def load_source(path: str | Path) -> pd.DataFrame:
     source = Path(path)
     suffix = source.suffix.lower()
-    if suffix == ".csv":
-        return pd.read_csv(source)
-    if suffix in {".xlsx", ".xls"}:
+    if suffix in EXCEL_SUFFIXES:
         return read_excel_transactions(source)
-    if suffix == ".parquet":
-        return pd.read_parquet(source)
+    if suffix in SUPPORTED_SUFFIXES:
+        return read_table(source)
     raise ValueError(f"不支持的数据格式: {suffix}")

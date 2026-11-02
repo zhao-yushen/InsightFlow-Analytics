@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 
 from .demo_data import DemoConfig, generate_demo_transactions
+from .ingest import reverse_cancelled
 
 TABLE_FILES = {
     "orders": "orders.csv",
@@ -192,14 +193,13 @@ def load_olist_directory(directory: str | Path) -> pd.DataFrame:
         products[["product_id", "category"]], on="product_id", how="left", validate="many_to_one"
     )
     cancelled = merged["order_status"].isin(["canceled", "unavailable"])
-    quantity = pd.Series(1, index=merged.index).mask(cancelled, -1)
-    return pd.DataFrame(
+    canonical = pd.DataFrame(
         {
-            "invoice_no": merged["order_id"].mask(cancelled, "C" + merged["order_id"].astype(str)),
+            "invoice_no": merged["order_id"],
             "stock_code": merged["product_id"],
             "description": merged["category"].fillna("PRODUCT"),
             "category": merged["category"].fillna("Uncategorized"),
-            "quantity": quantity,
+            "quantity": 1,
             "invoice_date": merged["order_purchase_timestamp"],
             "unit_price": merged["price"],
             "customer_id": merged["customer_unique_id"],
@@ -208,3 +208,4 @@ def load_olist_directory(directory: str | Path) -> pd.DataFrame:
             "shipping_cost": merged["freight_value"],
         }
     )
+    return reverse_cancelled(canonical, cancelled)

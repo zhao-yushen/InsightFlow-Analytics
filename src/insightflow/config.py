@@ -60,6 +60,12 @@ APP_ENV = os.getenv("INSIGHTFLOW_APP_ENV", "local").strip().lower()
 CACHE_TTL_SECONDS = int(os.getenv("INSIGHTFLOW_CACHE_TTL_SECONDS", "300"))
 SERVER_ADDRESS = os.getenv("INSIGHTFLOW_SERVER_ADDRESS", "127.0.0.1").strip() or "127.0.0.1"
 SERVER_PORT = int(os.getenv("INSIGHTFLOW_SERVER_PORT", "8501"))
+DEFAULT_CURRENCY = os.getenv("INSIGHTFLOW_CURRENCY", "GBP").strip().upper() or "GBP"
+# Share of a returned item's cost that goes back into sellable stock. 1.0 assumes every
+# return can be resold at cost; lower it when returns are damaged or written off.
+RETURN_RECOVERY_RATE = min(
+    1.0, max(0.0, float(os.getenv("INSIGHTFLOW_RETURN_RECOVERY_RATE", "1.0")))
+)
 
 
 def is_read_only() -> bool:

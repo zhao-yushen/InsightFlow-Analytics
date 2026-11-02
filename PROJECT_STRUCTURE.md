@@ -2,21 +2,24 @@
 
 ```text
 InsightFlow/
-├─ .github/workflows/       # GitHub Actions CI
-├─ .streamlit/              # Streamlit configuration
-├─ contracts/               # Data contracts
-├─ data/                    # Runtime data directories (.gitkeep only)
-├─ docs/                    # Architecture, case studies and guides
-├─ portfolio/               # Recruiter-facing visual previews
-├─ powerbi/                 # Power BI model and DAX package
-├─ reports/                 # Generated report output directory
-├─ scripts/                 # Bootstrap, validation and import scripts
-├─ src/insightflow/         # Application source code
+├─ .github/workflows/       # CI
+├─ .streamlit/              # Theme and server configuration
+├─ contracts/               # Data contract
+├─ data/                    # Runtime data (kept empty in git)
+├─ docs/                    # Architecture, methods, metrics, release notes
+├─ powerbi/                 # Power BI model and DAX measures
+├─ reports/                 # Generated reports
+├─ scripts/                 # Bootstrap, import, export and benchmark scripts
+├─ src/insightflow/         # Application package
+│  ├─ assets/               # Logo and globe land dots
+│  └─ pages/                # One module per page
+├─ static/fonts/            # Self-hosted Sora typeface
 ├─ tests/                   # Automated tests
 ├─ Dockerfile
 ├─ docker-compose.yml
 ├─ LICENSE
 ├─ pyproject.toml
 ├─ README.md
+├─ run_windows.bat
 └─ streamlit_app.py
 ```

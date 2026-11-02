@@ -1,361 +1,140 @@
-# InsightFlow v1.0.0
+# InsightFlow
 
+InsightFlow 是一个经营分析与决策平台：把零售交易数据变成一条看得见的资金流，告诉你钱从哪里来、在哪里流失，并在你做决定之前先模拟结果。
 
-> v0.4.3.3｜筛选可靠性与客户留存修复
+![经营总览：资金从商品毛额流向贡献利润](docs/assets/overview.png)
 
-重构细分维度筛选逻辑，实现“市场区域 → 国家和地区 → 商品品类 → 销售渠道”的级联联动，并实时显示当前筛选条件下的有效样本量。针对空样本和小样本场景增加结果保护：当订单量为 0 或少于 5 笔时，不再生成可能造成误读的环比变化和异常结论。
+所有截图均为可复现的模拟数据，不代表任何企业的真实经营结果。
 
-同时修复客户队列留存分析中的日期索引报错，统一经营行动的“未闭环”统计口径，并在数据接入中心新增全量替换模式，便于用户使用独立数据集重新构建分析仓库，避免与原有演示数据混合。
+## 它能回答什么
 
-v0.4.2.1｜多页面启动修复
+| 你想知道 | 去哪里看 | 用什么方法 |
+|---|---|---|
+| 钱去了哪里，这个月为什么变了 | 经营总览、利润与单位经济 | 动态资金流、价格-销量-结构-成本桥接，逐项加总等于实际变化 |
+| 哪个市场在赚钱 | 全球市场 | 可拖动的地球仪，点击市场查看详情 |
+| 顾客对价格有多敏感，该不该调价 | 定价实验室 | 用订单数据估计价格弹性，并估算每次调价的利润影响 |
+| 这个方案值不值得做 | 概率决策实验室 | Monte Carlo 模拟，并自动搜索 245 个价格、折扣和营销组合 |
+| 哪些客户可能不再回购 | 客户价值与流失 | 流失预测模型，经过跨期验证才启用 |
+| 哪些商品该补货，补多少 | 库存与履约 | ABC-XYZ 分类、按服务水平计算安全库存 |
+| 这次 A/B 测试能下结论吗 | A/B 实验分析 | Bootstrap 区间、分组检查、样本量估算 |
+| 这些数字可信吗 | 数据与指标信任中心 | 逐行记录来源，指标可信度由最弱的输入决定 |
 
-为每个 Streamlit 页面配置唯一的 URL 路径，解决多个页面因入口函数同名而被统一推断为 /render，进而导致应用无法正常启动的问题。
+## 快速开始
 
-> 项目定位
+Windows 上双击 `run_windows.bat`，或者手动运行：
 
-InsightFlow 是一套面向商业分析、数据分析、运营管理、咨询及企业数字化岗位的可信经营分析与概率决策平台。
-
-平台能够将单文件或多表业务数据转化为可审计的数据仓库与经营分析体系，覆盖数据治理、指标管理、销售与利润诊断、客户与商品分析、库存预警、经营预测、概率情景模拟、A/B 实验评估、行动闭环管理以及管理层报告输出。
-
-InsightFlow 的设计重点并非简单堆叠图表，而是建立一套更可信、更可解释的经营决策流程。系统明确区分真实数据、规则估算数据和模拟数据，并为重要指标与分析结论补充数据状态、计算规则、证据来源、可信度及不确定性说明，使分析结果能够追溯、复核并转化为具体经营行动
-
-v1.0.0 Portfolio Edition
-
-本版重构了完整 Streamlit 视觉系统，采用深海军蓝导航、行政级浅色驾驶舱、统一KPI卡片、状态标签、图表主题、表格和交互控件。管理层总览由原来的七卡同排调整为主次指标层级，并统一所有页面的标题、留白和信息密度。
-
-![InsightFlow v0.4.3.3 UI Preview](portfolio/ui_preview_v0.4.2.png)
-
-- 深色品牌侧栏与 Material Symbols 导航；
-- 统一的页面标题、英文眉题和业务说明；
-- 五张主KPI卡＋三张辅助指标卡，避免横向拥挤；
-- Plotly 全局专业主题、统一字体和克制配色；
-- 统一Tabs、按钮、表格、输入框、提示框与数据容器；
-- 笔记本和移动端响应式布局；
-- 独立静态界面预览：`portfolio/ui_preview_v0.4.2.html`。
-
-## v1.0.0 核心能力
-
-## 核心能力与工程特性
-
-* **实验结果可复现**：采用基于 SHA-256 的稳定随机种子生成机制，确保 Bootstrap 等随机过程在不同设备、不同进程和重复运行中保持一致。
-
-* **经营行动持久化**：通过稳定的问题指纹识别和去重，将负责人、截止日期、处理状态及备注等信息持久化写入 SQLite，避免页面刷新后行动记录丢失或重复生成。
-
-* **完整只读模式**：公开访客仅可浏览、筛选和下载结果，无法修改经营行动、运行故障注入演练或向服务器磁盘写入报告，提升公开部署的安全性。
-
-* **内存化报告生成**：HTML 与 Word 报告可直接在内存中生成并下载，无需落盘，适用于只读文件系统、多用户访问及云端公开部署。
-
-* **智能查询缓存**：依据 SQLite 主数据库与 WAL 文件的版本变化缓存只读查询结果；数据更新后自动失效，在保证结果一致性的同时提升页面响应速度。
-
-* **标准化命令行工具**：提供统一的 CLI 入口，支持 `insightflow bootstrap`、`validate`、`report`、`benchmark` 和 `run` 等命令，覆盖数据初始化、质量验证、报告生成、性能测试与应用启动。
-
-* **部署安全加固**：Docker 容器采用非 root 用户运行，并配置健康检查、只读根文件系统、Linux 能力降权、资源限制及独立数据挂载，降低公开部署风险。
-
-* **自动化测试体系**：已建立 33 项自动化测试，覆盖核心指标计算、数据契约、经营诊断、实验分析、报告生成及导入流程，核心后端测试覆盖率达到 83.8%。
-
-* **数据可信度分级**：分别对交易、成本和库存数据标注 `Verified`、`Estimated`、`Simulated` 或 `Mixed`，明确区分真实数据、规则估算和模拟数据，避免误读分析结果。
-
-* **指标信任元数据**：每项核心指标均记录业务定义、负责人、数据状态、可信度、来源说明及更新信息，增强指标口径的一致性与可追溯性。
-
-* **正式数据契约**：对必要字段、业务主键、字段类型、日期范围、数值边界、枚举值及未来日期进行系统检查，在数据进入分析链路前识别潜在质量问题。
-
-* **故障注入演练**：可在内存副本中主动注入重复记录、字段缺失、负价格、未来日期、未知渠道和月份缺口，用于验证数据质量体系是否能够准确识别异常，且不会污染正式数据库。
-
-* **多种数据结构支持**：同时支持单表零售数据、七表电商数据结构，并提供面向公开 Olist 数据集的多表适配器，展示多源数据建模与关联分析能力。
-
-* **概率决策实验室**：在传统点估计基础上引入 Monte Carlo 模拟，输出利润改善概率、90%结果区间及“收入增长但利润下降”的风险概率，使方案评估更符合真实经营决策中的不确定性。
-
-* **A/B 实验分析中心**：综合评估转化率、单客收入、贡献利润和退货率，并提供 Bootstrap 区间及业务护栏；当实验提升收入但损害利润时，系统会阻止直接全量推广。
-
-* **经营行动闭环**：将异常诊断、目标偏差和库存风险自动转化为带有数据证据、优先级、建议措施、负责人和截止日期的行动清单，推动分析结果进入实际管理流程。
-
-* **预测评价体系升级**：在 MAE、RMSE 和 MAPE 之外，引入 WAPE、sMAPE、MASE 和 Bias，从准确性、稳定性和系统偏差等多个维度评价预测模型。
-
-* **Power BI 模型交付包**：可导出交易事实表、客户与商品维度表、实验数据表和治理表，并提供 DAX 指标、星型模型关系图及页面设计蓝图，便于快速搭建企业级 BI 看板。
-
-* **招聘与作品集材料**：配套提供 90 秒演示脚本、利润下降分析案例、项目能力说明、性能基准及作品集展示材料，便于在简历、GitHub 和面试中完整呈现项目价值。
-
-
-
-## 中国与全球市场覆盖
-
-- 内置演示仓库覆盖30个国家和地区、8个市场区域；
-- 中国是核心市场，中文界面显示为“中国”，数据库稳定存储为 `China`；
-- 中国香港、中国澳门分别存储为 `Hong Kong SAR` 和 `Macao SAR`，统一归入大中华区；
-- 支持中文、英文缩写和常见别名自动归一，例如 `中国`、`PRC`、`CN` 均映射到 `China`；
-- 新增市场区域筛选，可直接比较大中华区、东亚、东南亚、欧洲、北美等区域；
-- 详细口径见 [地域与市场区域模型](docs/geography.md)。
-
-## 应用入口
-
-### Executive
-
-- 管理层总览
-- 经营行动中心
-
-### Diagnose
-
-- 销售诊断
-- 利润与单位经济
-- 客户价值与流失
-- 商品分析
-- 库存与履约
-- 异常根因诊断
-
-### Plan & Learn
-
-- 预测与目标管理
-- 概率决策实验室
-- A/B实验分析
-
-### Ask
-
-- 受控经营分析助手
-
-### Data Operations
-
-- CSV、Excel和Parquet数据接入；多工作表Excel优先读取 `transactions` 或首个满足必要字段的工作表
-- 数据契约预检与增量导入；P0/P1阻断导入，P2作为未登记类别提示
-- 文件夹监听与准实时微批更新
-
-### Trust & Deliver
-
-- 数据信任中心
-- Word、HTML和Markdown经营周报
-
-## 快速启动
-
-### Windows
-
-```powershell
-cd InsightFlow_Pro_v0.4.3.3
+```bash
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-insightflow bootstrap
+.venv\Scripts\activate
+pip install -e .
 insightflow run
 ```
 
-本地运行默认绑定 `127.0.0.1:8501`，不会主动暴露到局域网；Docker通过环境变量绑定 `0.0.0.0`。
+首次打开会自动生成演示数据，约需 15 秒。默认地址是 `http://127.0.0.1:8501`。
 
-也可以双击：
-
-```text
-run_windows.bat
-```
-
-### Docker
+也可以用 Docker：
 
 ```bash
 docker compose up --build
 ```
 
-访问：
+需要 Python 3.10 或更高版本。
 
-```text
-http://localhost:8501
-```
+## 接入你自己的数据
 
-## 统一命令行与运行模式
+打开“数据接入与实时刷新”，上传文件后确认字段对应关系即可。
 
-安装项目后可使用：
+- **文件格式：** CSV、TSV、Excel、Parquet、JSON。
+- **自动识别：** GBK 编码、中文表头、`￥1,299.00` 或 `1.299,50` 这样的数字、`2025年3月1日` 和 Excel 序列号日期。
+- **缺失字段：** 没有单价时由行金额推算，没有商品编码时用商品名称，每一处推算都会提示。
+- **订单状态：** 已取消或已退款的订单会记为一笔销售加一笔对冲。
+- **导入把关：** 在做任何估算之前先校验原始值，严重问题会阻止导入，并指出具体字段和行数。
+- **币种：** 仓库只用一种报告币种，导入其他币种时需要填写汇率，不会把不同货币直接相加。
 
-```bash
-insightflow bootstrap
-insightflow validate
-insightflow report
-insightflow benchmark --runs 20
-insightflow run
-```
-
-公开演示建议设置：
-
-```text
-INSIGHTFLOW_READ_ONLY=true
-INSIGHTFLOW_APP_ENV=public-demo
-```
-
-只读模式允许查询和下载，但禁止行动状态写回、故障演练以及服务器端报告落盘。
-
-## 数据配置
-
-### 1. 完整演示配置
+也可以把文件放进 `data/incoming`，由命令行自动导入：
 
 ```bash
-insightflow bootstrap
+insightflow watch --interval 30
 ```
 
-生成约10万条可重复交易记录以及成本、客户、库存、目标和实验数据。全部明确标记为 Simulated。
-
-### 2. 七表演示配置
-
-```bash
-python scripts/bootstrap_multitable.py
-```
-
-生成并连接：
-
-```text
-orders
-order_items
-customers
-products
-payments
-shipments
-inventory
-```
-
-目标是展示主外键、多表连接、Join验证和统一事实粒度。
-
-### 3. UCI兼容交易数据
+公开数据集有专用适配器：
 
 ```bash
 python scripts/import_uci.py --input "D:\data\online_retail_II.xlsx"
 ```
 
-交易字段标记为 Verified；缺失的成本、营销、库存和弹性字段标记为 Estimated 或 Simulated。
-
-### 4. Olist公共多表数据
-
 ```bash
 python scripts/import_olist.py --directory "D:\data\olist" --db data\warehouse\olist.db
 ```
 
-详见：[Olist导入说明](docs/olist_import.md)。
-
-## 数据契约与故障演练
-
-单独验证数据源：
-
-```bash
-python scripts/validate_contract.py --input data/raw/demo_transactions.csv
-```
-
-生成故障数据：
-
-```bash
-python scripts/inject_data_faults.py \
-  --input data/raw/demo_transactions.csv \
-  --output data/raw/demo_transactions_corrupted.csv
-```
-
-正式仓库不会被故障演练污染。
-
-## 报告、Power BI与性能
-
-```bash
-python scripts/build_static_report.py
-python scripts/export_powerbi.py
-python scripts/benchmark.py
-```
-
-输出包括：
+## 指标口径
 
 ```text
-reports/insightflow_business_report.html
-reports/insightflow_weekly_report.docx
-reports/performance_benchmark.json
-exports/powerbi/*.csv
-powerbi/dax_measures.md
-powerbi/data_model.mmd
-powerbi/report_blueprint.md
-```
-
-当前环境不能直接生成原生 `.pbix` 文件，因此仓库提供可导入数据、完整DAX、模型关系和页面蓝图；原生PBIX需在Power BI Desktop中建立。
-
-## 关键分析方法
-
-### 利润对账
-
-```text
-净销售额 = 商品毛额 − 折扣
-毛利润 = 净销售额 − 商品成本
+净销售额 = 商品毛额 − 折扣 − 退款
+毛利润   = 净销售额 − 商品成本（退回商品的成本已冲回）
 贡献利润 = 毛利润 − 物流 − 支付 − 营销 − 退货处理
 ```
 
-测试会验证各部分与汇总值精确对账。
+退货是一条反向记录，所以任何维度的汇总都已经扣除退货。详细定义见[指标字典](docs/metric_dictionary.md)。
 
-### 收入与利润诊断
+## 分析方法
 
-- 收入Shapley分解：活跃客户、购买频次和客单价；
-- 利润桥接：净销售额、毛利率和可变经营成本；
-- 国家、品类、渠道和商品贡献定位。
+每个模型的做法、假设和局限都写在[方法说明](docs/methodology.md)里。几个关键取舍：
 
-### 预测
+- **价格弹性：** 用周度订单数做泊松固定效应回归，再向品类先验收缩。这样能避开批发订单造成的结构偏差，也保留了零销量的周。
+- **流失预测：** 用旧数据训练，用之后 90 天打分。模型达不到标准时，页面会明确说明并改用规则分数。
+- **A/B 实验：** 区间跨过 0 时判定为证据不足，不会把噪声说成结论。
+- **预测：** 多个时序模型滚动回测后选优，未结束的月份不参与训练。
+- **问答助手：** 按关键词匹配已审核的查询模板。超出范围的问题会直接说明答不了。
 
-系统通过滚动回测比较朴素、移动平均、漂移、趋势、指数平滑和季节性模型，评价指标包括：
+配置 `OPENAI_API_KEY` 后，报告里的管理层摘要会由大模型撰写；不配置时使用规则引擎，其他功能都不依赖大模型。
 
-- MAE；
-- RMSE；
-- WAPE；
-- sMAPE；
-- MASE；
-- Bias。
-
-### 概率情景模拟
-
-价格弹性、需求、营销响应、采购成本和物流冲击以可见分布进入 Monte Carlo 模拟。系统报告：
-
-- 利润变化中位数；
-- 90%结果区间；
-- 利润改善概率；
-- 收入上升但利润下降概率；
-- 关键参数敏感性排序。
-
-### 实验分析
-
-实验中心同时评价：
-
-- 转化率；
-- 单客收入；
-- 单客贡献利润；
-- 退货率护栏；
-- Bootstrap置信区间和改善概率。
-
-## 测试
+## 工程质量
 
 ```bash
-PYTHONPATH=src PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q
+pip install -e ".[dev]"
+python -m pytest --cov=src/insightflow --cov-report=term-missing --cov-fail-under=80 -q
+python -m ruff check src tests scripts streamlit_app.py
+python -m bandit -q -r src -x src/insightflow/pages -lll -ii
 ```
 
-当前结果：
+最新结果见[验证记录](docs/validation.md)。每个页面都有自动化渲染测试，覆盖率统计包含界面代码。CI 在 Python 3.11 和 3.13 上运行。
 
-```text
-33 passed｜核心后端覆盖率 83.8%
-```
+## 配置
 
-覆盖数据清洗、契约、利润对账、Shapley分解、预测、目标、库存、增量ETL、来源标签、Monte Carlo、实验护栏、多表转换和报告输出。
+复制 `.env.example` 为 `.env` 后修改。
 
-## 招聘展示材料
-
-- [90秒演示脚本](docs/demo_script_90s.md)
-- [利润下降商业案例](docs/case_studies/profit_decline_case.md)
-- [数据配置与可信度说明](docs/data_profiles.md)
-- [招聘作品集指南](docs/recruiter_portfolio_guide.md)
-- [Power BI报告蓝图](powerbi/report_blueprint.md)
-
-## 推荐简历表述
-
-> **InsightFlow Pro：可信经营分析与概率决策平台**｜Python、SQL、SQLite、Streamlit、Plotly、Power BI、A/B Testing  
-> - 搭建从单表/多表数据接入、数据契约、增量ETL和星型建模，到经营诊断、预测、实验分析和管理报告的端到端流程，处理约10.7万条演示交易记录。  
-> - 建立净销售额、毛利润、贡献利润、客户价值、库存覆盖和目标完成度等指标，并为每个指标增加来源状态、置信度、负责人和血缘，区分真实、估算与模拟数据。  
-> - 使用Shapley分解与利润桥接定位经营变化，通过Monte Carlo模拟量化利润改善概率和下行区间，并构建利润护栏A/B实验模块，识别“增收但减利”的促销方案。  
-> - 开发经营行动中心、受控自然语言查询、Word/HTML自动周报和Power BI模型包；使用33项自动化测试验证财务对账、增量幂等性、数据契约和实验决策逻辑。
+| 变量 | 作用 | 默认值 |
+|---|---|---|
+| `INSIGHTFLOW_CURRENCY` | 新仓库的报告币种 | `GBP` |
+| `INSIGHTFLOW_RETURN_RECOVERY_RATE` | 退回商品能重新销售的比例 | `1.0` |
+| `INSIGHTFLOW_READ_ONLY` | 只读模式，用于公开演示 | `false` |
+| `OPENAI_API_KEY` | 启用大模型摘要 | 空 |
 
 ## 边界说明
 
-- 内置交易、成本、库存、目标和实验均用于演示，不代表真实企业结果；
-- UCI和Olist适配器可验证公开源字段，但源中不存在的成本和库存仍会明确标记为估算或模拟；
-- 当前CLV和流失风险为透明基准方法，不应描述为经过真实标签验证的机器学习预测；
-- 情景模拟表达假设与风险，不构成确定性经营承诺；
-- 真正企业部署还需要身份认证、权限、正式数据负责人、监控、备份和隐私治理。
+- 内置的交易、成本、库存、目标和实验都是模拟数据。
+- 没有提供成本或库存时，相应字段是规则估算值，不是审计数字。
+- 经营目标默认由近三个月均值加规则增幅生成，并非已批准预算。
+- 价格模型只在历史价格附近可靠，全量调价前请先做实验。
+- 企业部署还需要身份认证、权限、监控、备份和隐私治理。
+
+## 文档
+
+- [架构说明](docs/architecture.md)
+- [方法说明](docs/methodology.md)
+- [指标字典](docs/metric_dictionary.md)
+- [数据来源与可信度](docs/data_profiles.md)
+- [Power BI 接入](docs/powerbi_guide.md)
+- [利润下降案例](docs/case_studies/profit_decline_case.md)
+- [版本记录](docs/release-notes/)
 
 ## License
 
 MIT
+
 ## 作者
 
 独立设计与开发：Zhao Yushen
 
-本项目使用 AI 编程工具辅助完成部分代码编写、测试、调试和文档整理，
-核心产品设计、业务框架、功能选择与验收由作者完成。
+本项目使用 AI 编程工具辅助完成部分代码编写、测试、调试和文档整理，核心产品设计、业务框架、功能选择与验收由作者完成。

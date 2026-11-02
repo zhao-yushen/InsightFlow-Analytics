@@ -7,8 +7,10 @@ from . import (
     diagnostics,
     experiments,
     inventory,
+    markets,
     overview,
     planning,
+    pricing,
     products,
     profit,
     quality,
@@ -18,6 +20,8 @@ from . import (
 
 __all__ = [
     "overview",
+    "markets",
+    "pricing",
     "actions",
     "sales",
     "profit",

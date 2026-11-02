@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -9,6 +10,21 @@ import pandas as pd
 
 from .config import is_read_only
 from .warehouse import connect, query_df, table_exists
+
+RETURN_GUARDRAIL = 0.01
+HARM_PROBABILITY = 0.10
+CONFIDENT_PROBABILITY = 0.90
+Z_ALPHA = 1.96
+Z_POWER = 0.8416
+ASSIGNMENT_COLUMNS = (
+    "experiment_id",
+    "customer_id",
+    "assignment",
+    "converted",
+    "net_revenue",
+    "contribution_profit",
+    "returned",
+)
 
 
 @dataclass(frozen=True)
@@ -23,6 +39,11 @@ class ExperimentSummary:
     probability_positive: float
     decision: str
     guardrail_status: str
+    decision_code: str = "inconclusive"
+    sample_ratio_p: float = 1.0
+    minimum_detectable_lift: float = 0.0
+    required_sample_per_arm: int = 0
+    data_status: str = "Simulated"
 
 
 def stable_seed(value: str) -> int:
@@ -45,13 +66,15 @@ def seed_demo_experiments(db_path: str | Path) -> None:
     if customers.empty:
         return
     customer_ids = customers["customer_id"].astype(str).tolist()
+    # Three deliberately different outcomes: one worth shipping, one that grows revenue
+    # while destroying profit, and one too small to call either way.
     definitions = [
         {
             "experiment_id": "EXP_FREE_SHIPPING_01",
             "experiment_name": "高价值客户免邮测试",
             "primary_metric": "contribution_profit",
             "treatment_revenue_lift": 0.08,
-            "treatment_profit_lift": 0.04,
+            "treatment_profit_lift": 0.24,
             "treatment_conversion_lift": 0.06,
             "treatment_return_lift": 0.003,
         },
@@ -60,9 +83,18 @@ def seed_demo_experiments(db_path: str | Path) -> None:
             "experiment_name": "全客群九折促销测试",
             "primary_metric": "contribution_profit",
             "treatment_revenue_lift": 0.12,
-            "treatment_profit_lift": -0.55,
+            "treatment_profit_lift": -0.62,
             "treatment_conversion_lift": 0.09,
             "treatment_return_lift": 0.018,
+        },
+        {
+            "experiment_id": "EXP_WINBACK_EMAIL_01",
+            "experiment_name": "沉睡客户召回邮件测试",
+            "primary_metric": "contribution_profit",
+            "treatment_revenue_lift": 0.01,
+            "treatment_profit_lift": 0.01,
+            "treatment_conversion_lift": 0.01,
+            "treatment_return_lift": 0.0,
         },
     ]
     rows: list[dict] = []
@@ -122,10 +154,48 @@ def seed_demo_experiments(db_path: str | Path) -> None:
 
 def experiment_catalog(db_path: str | Path) -> pd.DataFrame:
     if not table_exists(db_path, "experiment_catalog"):
-        if is_read_only():
-            return pd.DataFrame()
-        seed_demo_experiments(db_path)
+        return pd.DataFrame()
     return query_df(db_path, "SELECT * FROM experiment_catalog")
+
+
+def import_experiment(db_path: str | Path, frame: pd.DataFrame, name: str) -> int:
+    """Load a real experiment's customer-level results and replace any earlier version."""
+    if is_read_only():
+        raise PermissionError("当前为只读模式，不能导入实验数据。")
+    missing = [column for column in ASSIGNMENT_COLUMNS if column not in frame.columns]
+    if missing:
+        raise ValueError("实验数据缺少字段: " + ", ".join(missing))
+    data = frame[list(ASSIGNMENT_COLUMNS)].copy()
+    data["assignment"] = data["assignment"].astype(str).str.strip().str.title()
+    if set(data["assignment"].unique()) != {"Control", "Treatment"}:
+        raise ValueError("assignment 字段只能包含 Control 和 Treatment 两组。")
+    for column in ("converted", "net_revenue", "contribution_profit", "returned"):
+        data[column] = pd.to_numeric(data[column], errors="coerce").fillna(0.0)
+    data["experiment_name"] = name
+    data["primary_metric"] = "contribution_profit"
+    data["data_status"] = "Verified"
+    experiment_ids = data["experiment_id"].astype(str).unique().tolist()
+    catalog_rows = pd.DataFrame(
+        {
+            "experiment_id": experiment_ids,
+            "experiment_name": name,
+            "primary_metric": "contribution_profit",
+        }
+    )
+    with connect(db_path) as conn:
+        if table_exists(db_path, "experiment_assignments"):
+            placeholders = ",".join("?" for _ in experiment_ids)
+            conn.execute(
+                f"DELETE FROM experiment_assignments WHERE experiment_id IN ({placeholders})",
+                experiment_ids,
+            )
+            conn.execute(
+                f"DELETE FROM experiment_catalog WHERE experiment_id IN ({placeholders})",
+                experiment_ids,
+            )
+        data.to_sql("experiment_assignments", conn, if_exists="append", index=False)
+        catalog_rows.to_sql("experiment_catalog", conn, if_exists="append", index=False)
+    return len(data)
 
 
 def _bootstrap_difference(
@@ -143,6 +213,56 @@ def _bootstrap_difference(
         float(np.quantile(diffs, 0.975)),
         float((diffs > 0).mean()),
     )
+
+
+def sample_ratio_p_value(control_n: int, treatment_n: int) -> float:
+    """Chi-square test of a 50/50 split. A tiny p-value means assignment itself is broken."""
+    total = control_n + treatment_n
+    if total == 0:
+        return 1.0
+    expected = total / 2
+    statistic = (control_n - expected) ** 2 / expected + (treatment_n - expected) ** 2 / expected
+    return float(math.erfc(math.sqrt(statistic / 2)))
+
+
+def minimum_detectable_lift(control: np.ndarray, treatment: np.ndarray) -> float:
+    """Smallest true difference this sample would catch with 80% power at a 5% error rate."""
+    if len(control) < 2 or len(treatment) < 2:
+        return 0.0
+    standard_error = math.sqrt(
+        float(control.var(ddof=1)) / len(control) + float(treatment.var(ddof=1)) / len(treatment)
+    )
+    return (Z_ALPHA + Z_POWER) * standard_error
+
+
+def required_sample_per_arm(control: np.ndarray, treatment: np.ndarray, effect: float) -> int:
+    """Customers needed in each arm to detect a given effect with 80% power."""
+    if effect <= 0 or len(control) < 2 or len(treatment) < 2:
+        return 0
+    pooled = (float(control.var(ddof=1)) + float(treatment.var(ddof=1))) / 2
+    return math.ceil(2 * (Z_ALPHA + Z_POWER) ** 2 * pooled / effect**2)
+
+
+def _decide(primary: pd.Series, revenue: pd.Series, returns: pd.Series) -> tuple[str, str, bool]:
+    """Call a result only when the evidence supports it.
+
+    A negative point estimate inside a wide interval is not proof of harm, so noise now
+    reads as inconclusive rather than as a confident rejection.
+    """
+    returns_ok = bool(returns["absolute_lift"] <= RETURN_GUARDRAIL)
+    harmful = (
+        primary["ci_high"] < 0 or primary["probability_positive"] <= HARM_PROBABILITY
+    )
+    if harmful:
+        reason = "收入增长但利润受损" if revenue["absolute_lift"] > 0 else "利润明显下降"
+        return "stop", f"不建议推广：{reason}", False
+    if not returns_ok:
+        return "stop", "不建议推广：退货率超过护栏", False
+    if primary["ci_low"] > 0:
+        return "ship", "建议推广", True
+    if primary["probability_positive"] >= CONFIDENT_PROBABILITY:
+        return "pilot", "方向向好：先小范围推广并继续观察", True
+    return "inconclusive", "证据不足：继续实验，暂不下结论", True
 
 
 def analyze_experiment(
@@ -180,17 +300,11 @@ def analyze_experiment(
     primary = metric_table.loc[metric_table["metric"] == "contribution_profit"].iloc[0]
     revenue = metric_table.loc[metric_table["metric"] == "net_revenue"].iloc[0]
     returns = metric_table.loc[metric_table["metric"] == "returned"].iloc[0]
-    guardrail_ok = returns["absolute_lift"] <= 0.01 and primary["absolute_lift"] >= 0
-    if primary["absolute_lift"] < 0 or not guardrail_ok:
-        decision = (
-            "不建议推广：收入增长但利润受损"
-            if revenue["absolute_lift"] > 0
-            else "不建议推广：利润护栏未通过"
-        )
-    elif primary["probability_positive"] >= 0.90:
-        decision = "建议推广"
-    else:
-        decision = "继续实验或定向推广"
+    code, decision, guardrail_ok = _decide(primary, revenue, returns)
+
+    control = data.loc[data["assignment"] == "Control", "contribution_profit"].to_numpy(float)
+    treatment = data.loc[data["assignment"] == "Treatment", "contribution_profit"].to_numpy(float)
+    meaningful_effect = max(abs(float(primary["control_mean"])) * 0.05, 1e-6)
     summary = ExperimentSummary(
         experiment_id=experiment_id,
         experiment_name=str(data["experiment_name"].iloc[0]),
@@ -202,6 +316,11 @@ def analyze_experiment(
         probability_positive=float(primary["probability_positive"]),
         decision=decision,
         guardrail_status="通过" if guardrail_ok else "未通过",
+        decision_code=code,
+        sample_ratio_p=sample_ratio_p_value(len(control), len(treatment)),
+        minimum_detectable_lift=minimum_detectable_lift(control, treatment),
+        required_sample_per_arm=required_sample_per_arm(control, treatment, meaningful_effect),
+        data_status=str(data["data_status"].iloc[0]),
     )
     balance = data.groupby("assignment", as_index=False).agg(
         customers=("customer_id", "nunique"),

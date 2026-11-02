@@ -18,3 +18,16 @@ reports/*.docx
 !reports/.gitkeep
 
 *.egg-info/
+
+# Generated locally
+data/raw/*.csv
+data/raw/multitable_demo/
+data/warehouse/*.db-*
+exports/
+.coverage
+*.zip
+InsightFlow_GitHub_Ready/
+reports/*.json
+portfolio/index.html
+build/
+dist/

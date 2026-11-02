@@ -81,6 +81,41 @@ MARKETS = OrderedDict(
     ]
 )
 
+# Market centres used to place each country on the globe (latitude, longitude).
+COORDINATES = {
+    "United Kingdom": (54.0, -2.0),
+    "China": (35.0, 105.0),
+    "Germany": (51.0, 10.0),
+    "France": (46.5, 2.5),
+    "United States": (39.5, -98.0),
+    "Netherlands": (52.2, 5.3),
+    "Spain": (40.2, -3.6),
+    "Italy": (42.8, 12.6),
+    "Japan": (36.5, 138.0),
+    "India": (21.0, 78.5),
+    "Poland": (52.0, 19.5),
+    "South Korea": (36.5, 127.8),
+    "Australia": (-25.5, 134.5),
+    "Ireland": (53.2, -8.0),
+    "Belgium": (50.6, 4.6),
+    "Canada": (56.0, -106.0),
+    "Hong Kong SAR": (22.3, 114.2),
+    "Singapore": (1.35, 103.8),
+    "Portugal": (39.6, -8.0),
+    "Malaysia": (3.8, 102.0),
+    "Thailand": (15.5, 101.0),
+    "Indonesia": (-2.5, 118.0),
+    "Sweden": (62.0, 15.0),
+    "Austria": (47.6, 14.1),
+    "Denmark": (56.0, 10.0),
+    "Switzerland": (46.8, 8.2),
+    "United Arab Emirates": (24.2, 54.4),
+    "Norway": (61.0, 8.5),
+    "New Zealand": (-41.5, 172.5),
+    "Macao SAR": (22.2, 113.55),
+    "Brazil": (-14.0, -51.0),
+}
+
 REGION_LABELS = {
     "Europe": {"zh-CN": "欧洲"},
     "Greater China": {"zh-CN": "大中华区"},
@@ -163,6 +198,10 @@ def canonical_country(value: object) -> str:
 def market_region(country: object) -> str:
     canonical = canonical_country(country)
     return str(MARKETS.get(canonical, {}).get("region", "Other"))
+
+
+def market_coordinates(country: object) -> tuple[float, float] | None:
+    return COORDINATES.get(canonical_country(country))
 
 
 def shipping_multiplier(country: object, default: float = 1.25) -> float:

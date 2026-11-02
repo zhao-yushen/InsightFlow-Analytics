@@ -18,6 +18,7 @@ from .config import (
     SERVER_PORT,
     ensure_directories,
 )
+from .currency import warehouse_currency
 from .demo_data import write_demo_csv
 from .diagnostics import generate_diagnostics, profit_driver_decomposition
 from .etl import clean_transactions, load_source
@@ -111,6 +112,7 @@ def report(db_path: Path = DEFAULT_DB_PATH) -> None:
         inventory=inventory,
         quality=quality,
         data_profile=profile_text,
+        currency=warehouse_currency(db_path),
     )
     docx = build_word_report(
         REPORTS_DIR / "insightflow_weekly_report.docx",
@@ -123,6 +125,7 @@ def report(db_path: Path = DEFAULT_DB_PATH) -> None:
         inventory=inventory,
         quality=quality,
         data_profile=profile_text,
+        currency=warehouse_currency(db_path),
     )
     print(f"HTML：{html}\nWord：{docx}")
 
@@ -159,7 +162,7 @@ def run_app(extra_args: list[str]) -> None:
         f"--server.port={SERVER_PORT}",
         *extra_args,
     ]
-    raise SystemExit(subprocess.call(command))
+    raise SystemExit(subprocess.call(command, cwd=ROOT_DIR))
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -1,5 +1,5 @@
 {
-  "contract_id": "retail_transactions_v2",
+  "contract_id": "retail_transactions_v3",
   "description": "Canonical transaction contract for InsightFlow retail analytics.",
   "primary_key": [
     "invoice_no",
@@ -46,6 +46,18 @@
     },
     "unit_cost": {
       "min_exclusive": 0
+    },
+    "shipping_cost": {
+      "min": 0
+    },
+    "payment_fee": {
+      "min": 0
+    },
+    "marketing_cost": {
+      "min": 0
+    },
+    "return_processing_cost": {
+      "min": 0
     }
   },
   "allowed_values": {

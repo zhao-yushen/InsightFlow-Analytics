@@ -28,7 +28,8 @@ def _db(tmp_path: Path) -> tuple[Path, FilterSpec]:
             n_products=20,
         )
     )
-    build_warehouse(clean_transactions(frame), db, source_name="hardening_test")
+    result = clean_transactions(frame, source_profile="demo_test")
+    build_warehouse(result, db, source_name="hardening_test")
     return db, FilterSpec("2025-10-01", "2025-12-31")
 
 

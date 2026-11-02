@@ -12,7 +12,6 @@ STATUS_LABELS = {
     "Simulated": "模拟",
     "Mixed": "混合",
 }
-STATUS_ICONS = {"Verified": "✅", "Estimated": "🧮", "Simulated": "🧪", "Mixed": "🔀"}
 
 
 def dataset_profile(db_path: str | Path) -> dict[str, str | float]:
@@ -44,7 +43,7 @@ def metric_trust(db_path: str | Path, metric_id: str) -> dict[str, str | float]:
 
 
 def trust_label(status: str) -> str:
-    return f"{STATUS_ICONS.get(status, 'ℹ️')} {STATUS_LABELS.get(status, status)}"
+    return STATUS_LABELS.get(status, status)
 
 
 def metric_trust_table(db_path: str | Path) -> pd.DataFrame:

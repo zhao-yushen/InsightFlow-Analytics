@@ -6,8 +6,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .metrics import FilterSpec, kpi_summary
+from .metrics import FilterSpec, filter_clause, kpi_summary
 from .warehouse import query_df
+
+DEFAULT_ELASTICITY = -1.4
+MARKETING_RESPONSE = 0.18
 
 
 @dataclass(frozen=True)
@@ -23,32 +26,87 @@ class ScenarioInputs:
 
 
 def _weighted_elasticity(db_path: str | Path, filters: FilterSpec) -> float:
-    clauses = ["sale_valid=1"]
-    params: list = []
-    if filters.start_date:
-        clauses.append("date>=?")
-        params.append(filters.start_date)
-    if filters.end_date:
-        clauses.append("date<=?")
-        params.append(filters.end_date)
-    for column, values in (
-        ("country", filters.countries),
-        ("category", filters.categories),
-        ("channel", filters.channels),
-    ):
-        if values:
-            placeholders = ",".join("?" for _ in values)
-            clauses.append(f"{column} IN ({placeholders})")
-            params.extend(values)
+    where, params = filter_clause(filters)
     row = query_df(
         db_path,
         f"""
         SELECT SUM(price_elasticity * net_revenue) / NULLIF(SUM(net_revenue),0) elasticity
-        FROM fact_transactions WHERE {" AND ".join(clauses)}
+        FROM v_sales WHERE {where}
         """,
         params,
     ).iloc[0, 0]
-    return float(row if row is not None else -1.4)
+    return float(row) if row is not None and not pd.isna(row) else DEFAULT_ELASTICITY
+
+
+def _scenario_elasticity(
+    db_path: str | Path, filters: FilterSpec, scenario: ScenarioInputs
+) -> float:
+    if scenario.elasticity_override is not None:
+        return float(scenario.elasticity_override)
+    from .elasticity import blended_elasticity
+
+    return blended_elasticity(db_path, filters, default=_weighted_elasticity(db_path, filters))
+
+
+def project_outcome(
+    baseline: dict[str, float],
+    scenario: ScenarioInputs,
+    *,
+    elasticity,
+    marketing_response=MARKETING_RESPONSE,
+    baseline_demand=1.0,
+    cost_shock=0.0,
+    shipping_shock=0.0,
+) -> dict[str, object]:
+    """Project one scenario. Scalars give a point estimate; arrays give a simulation.
+
+    The deterministic comparison and the Monte Carlo run share this single formula, so a
+    median can never disagree with a point estimate because of a different clipping rule.
+    With no changes it reproduces the baseline exactly, returns included.
+    """
+    price_change = scenario.price_change_pct / 100
+    discount_change = scenario.discount_change_pp / 100
+    marketing_change = scenario.marketing_change_pct / 100
+    cost_change = scenario.unit_cost_change_pct / 100 + cost_shock
+    shipping_change = scenario.shipping_cost_change_pct / 100 + shipping_shock
+    cancellation_change = scenario.cancellation_change_pp / 100
+
+    baseline_discount = baseline["discount_rate"]
+    effective_price_change = price_change - discount_change / max(1 - baseline_discount, 0.3)
+    price_base = max(1 + effective_price_change, 0.1)
+    price_factor = np.clip(price_base**elasticity, 0.35, 2.25)
+    marketing_factor = np.clip(1 + marketing_response * marketing_change, 0.55, 1.8)
+    demand_factor = price_factor * marketing_factor * baseline_demand
+
+    discount_rate = float(np.clip(baseline_discount + discount_change, 0, 0.40))
+    gross = baseline["gross_revenue"] * demand_factor * (1 + price_change)
+    sales_net = gross * (1 - discount_rate)
+    baseline_sales_net = baseline["gross_revenue"] - baseline["discount_amount"]
+    sale_cogs = baseline["sale_cogs"] * demand_factor * (1 + cost_change)
+    shipping = baseline["shipping_cost"] * demand_factor * (1 + shipping_change)
+    payment = baseline["payment_fee"] * sales_net / max(baseline_sales_net, 1)
+    marketing = baseline["marketing_cost"] * (1 + marketing_change)
+
+    cancellation_rate = float(np.clip(baseline["cancellation_rate"] + cancellation_change, 0, 0.30))
+    return_scale = cancellation_rate / max(baseline["cancellation_rate"], 0.005)
+    if not cancellation_change:
+        return_scale = 1.0
+    refunds = baseline["returns_value"] * return_scale * sales_net / max(baseline_sales_net, 1)
+    recovered = baseline["returned_cogs"] * return_scale * demand_factor * (1 + cost_change)
+    handling = baseline["return_processing_cost"] * return_scale * demand_factor
+
+    revenue = sales_net - refunds
+    cogs = sale_cogs - recovered
+    gross_profit = revenue - cogs
+    contribution = gross_profit - shipping - payment - marketing - handling
+    return {
+        "demand_factor": demand_factor,
+        "revenue": revenue,
+        "gross_profit": gross_profit,
+        "contribution_profit": contribution,
+        "discount_rate": discount_rate,
+        "cancellation_rate": cancellation_rate,
+    }
 
 
 def simulate_scenario(
@@ -57,67 +115,28 @@ def simulate_scenario(
     scenario: ScenarioInputs,
 ) -> dict[str, float | str]:
     baseline = kpi_summary(db_path, filters)
-    elasticity = (
-        scenario.elasticity_override
-        if scenario.elasticity_override is not None
-        else _weighted_elasticity(db_path, filters)
-    )
-    price_change = scenario.price_change_pct / 100
-    discount_change = scenario.discount_change_pp / 100
-    marketing_change = scenario.marketing_change_pct / 100
-    cost_change = scenario.unit_cost_change_pct / 100
-    shipping_change = scenario.shipping_cost_change_pct / 100
-    cancellation_change = scenario.cancellation_change_pp / 100
-
-    baseline_discount = baseline["discount_rate"]
-    effective_price_change = price_change - discount_change / max(1 - baseline_discount, 0.3)
-    price_demand_factor = max(0.35, (1 + effective_price_change) ** elasticity)
-    marketing_demand_factor = max(0.6, 1 + 0.18 * marketing_change)
-    demand_factor = price_demand_factor * marketing_demand_factor
-
-    projected_units = baseline["units"] * demand_factor
-    projected_orders = baseline["orders"] * demand_factor
-    projected_customers = baseline["active_customers"] * (0.65 + 0.35 * demand_factor)
-    projected_gross_revenue = baseline["gross_revenue"] * demand_factor * (1 + price_change)
-    projected_discount_rate = float(np.clip(baseline_discount + discount_change, 0, 0.40))
-    projected_revenue = projected_gross_revenue * (1 - projected_discount_rate)
-    projected_cogs = baseline["cogs"] * demand_factor * (1 + cost_change)
-    projected_shipping = baseline["shipping_cost"] * demand_factor * (1 + shipping_change)
-    projected_payment = baseline["payment_fee"] * (projected_revenue / max(baseline["revenue"], 1))
-    projected_marketing = baseline["marketing_cost"] * (1 + marketing_change)
-    projected_cancellation_rate = float(
-        np.clip(baseline["cancellation_rate"] + cancellation_change, 0, 0.30)
-    )
-    projected_return_loss = baseline["return_loss"] * (
-        projected_cancellation_rate / max(baseline["cancellation_rate"], 0.005)
-    )
-    projected_gross_profit = projected_revenue - projected_cogs
-    incremental_return_loss = projected_return_loss - baseline["return_loss"]
-    projected_contribution = (
-        projected_gross_profit
-        - projected_shipping
-        - projected_payment
-        - projected_marketing
-        - incremental_return_loss
-    )
+    elasticity = _scenario_elasticity(db_path, filters, scenario)
+    outcome = project_outcome(baseline, scenario, elasticity=elasticity)
+    demand_factor = float(outcome["demand_factor"])
+    revenue = float(outcome["revenue"])
+    gross_profit = float(outcome["gross_profit"])
+    contribution = float(outcome["contribution_profit"])
     result: dict[str, float | str] = {
         "scenario": scenario.name,
         "elasticity": elasticity,
         "demand_factor": demand_factor,
-        "revenue": projected_revenue,
-        "revenue_change": projected_revenue - baseline["revenue"],
-        "gross_profit": projected_gross_profit,
-        "gross_margin": projected_gross_profit / projected_revenue if projected_revenue else 0.0,
-        "contribution_profit": projected_contribution,
-        "contribution_margin": projected_contribution / projected_revenue
-        if projected_revenue
-        else 0.0,
-        "contribution_profit_change": projected_contribution - baseline["contribution_profit"],
-        "orders": projected_orders,
-        "active_customers": projected_customers,
-        "units": projected_units,
-        "discount_rate": projected_discount_rate,
-        "cancellation_rate": projected_cancellation_rate,
+        "revenue": revenue,
+        "revenue_change": revenue - baseline["revenue"],
+        "gross_profit": gross_profit,
+        "gross_margin": gross_profit / revenue if revenue else 0.0,
+        "contribution_profit": contribution,
+        "contribution_margin": contribution / revenue if revenue else 0.0,
+        "contribution_profit_change": contribution - baseline["contribution_profit"],
+        "orders": baseline["orders"] * demand_factor,
+        "active_customers": baseline["active_customers"] * (0.65 + 0.35 * demand_factor),
+        "units": baseline["units"] * demand_factor,
+        "discount_rate": float(outcome["discount_rate"]),
+        "cancellation_rate": float(outcome["cancellation_rate"]),
         **{f"input_{k}": v for k, v in asdict(scenario).items() if k != "name"},
     }
     return result
@@ -144,13 +163,31 @@ def compare_scenarios(
 @dataclass(frozen=True)
 class UncertaintyInputs:
     elasticity_sd: float = 0.22
-    marketing_response_mean: float = 0.18
+    marketing_response_mean: float = MARKETING_RESPONSE
     marketing_response_sd: float = 0.05
     baseline_demand_sd: float = 0.035
     cost_shock_sd: float = 0.025
     shipping_shock_sd: float = 0.03
     simulations: int = 5000
     seed: int = 20260801
+
+
+def uncertainty_draws(
+    base_elasticity: float, uncertainty: UncertaintyInputs
+) -> dict[str, np.ndarray]:
+    rng = np.random.default_rng(uncertainty.seed)
+    n = max(500, int(uncertainty.simulations))
+    return {
+        "elasticity": rng.normal(base_elasticity, uncertainty.elasticity_sd, n),
+        "marketing_response": np.clip(
+            rng.normal(uncertainty.marketing_response_mean, uncertainty.marketing_response_sd, n),
+            0.02,
+            0.45,
+        ),
+        "baseline_demand": np.clip(rng.normal(1.0, uncertainty.baseline_demand_sd, n), 0.75, 1.25),
+        "cost_shock": rng.normal(0.0, uncertainty.cost_shock_sd, n),
+        "shipping_shock": rng.normal(0.0, uncertainty.shipping_shock_sd, n),
+    }
 
 
 def monte_carlo_scenario(
@@ -167,58 +204,18 @@ def monte_carlo_scenario(
     """
     uncertainty = uncertainty or UncertaintyInputs()
     baseline = kpi_summary(db_path, filters)
-    base_elasticity = (
-        scenario.elasticity_override
-        if scenario.elasticity_override is not None
-        else _weighted_elasticity(db_path, filters)
-    )
-    rng = np.random.default_rng(uncertainty.seed)
-    n = max(500, int(uncertainty.simulations))
-
-    elasticity = rng.normal(base_elasticity, uncertainty.elasticity_sd, n)
-    marketing_response = np.clip(
-        rng.normal(uncertainty.marketing_response_mean, uncertainty.marketing_response_sd, n),
-        0.02,
-        0.45,
-    )
-    baseline_demand = np.clip(rng.normal(1.0, uncertainty.baseline_demand_sd, n), 0.75, 1.25)
-    cost_shock = rng.normal(0.0, uncertainty.cost_shock_sd, n)
-    shipping_shock = rng.normal(0.0, uncertainty.shipping_shock_sd, n)
-
-    price_change = scenario.price_change_pct / 100
-    discount_change = scenario.discount_change_pp / 100
-    marketing_change = scenario.marketing_change_pct / 100
-    cost_change = scenario.unit_cost_change_pct / 100 + cost_shock
-    shipping_change = scenario.shipping_cost_change_pct / 100 + shipping_shock
-    cancellation_change = scenario.cancellation_change_pp / 100
-
-    baseline_discount = baseline["discount_rate"]
-    effective_price_change = price_change - discount_change / max(1 - baseline_discount, 0.3)
-    price_factor = np.clip((1 + effective_price_change) ** elasticity, 0.35, 2.25)
-    marketing_factor = np.clip(1 + marketing_response * marketing_change, 0.55, 1.8)
-    demand_factor = price_factor * marketing_factor * baseline_demand
-
-    gross_revenue = baseline["gross_revenue"] * demand_factor * (1 + price_change)
-    discount_rate = float(np.clip(baseline_discount + discount_change, 0, 0.40))
-    revenue = gross_revenue * (1 - discount_rate)
-    cogs = baseline["cogs"] * demand_factor * (1 + cost_change)
-    shipping = baseline["shipping_cost"] * demand_factor * (1 + shipping_change)
-    payment = baseline["payment_fee"] * revenue / max(baseline["revenue"], 1)
-    marketing = baseline["marketing_cost"] * (1 + marketing_change)
-    cancellation_rate = float(np.clip(baseline["cancellation_rate"] + cancellation_change, 0, 0.30))
-    return_loss = (
-        baseline["return_loss"] * cancellation_rate / max(baseline["cancellation_rate"], 0.005)
-    )
-    incremental_return = return_loss - baseline["return_loss"]
-    contribution = revenue - cogs - shipping - payment - marketing - incremental_return
+    draws = uncertainty_draws(_scenario_elasticity(db_path, filters, scenario), uncertainty)
+    outcome = project_outcome(baseline, scenario, **draws)
+    revenue = outcome["revenue"]
+    contribution = outcome["contribution_profit"]
 
     samples = pd.DataFrame(
         {
-            "elasticity": elasticity,
-            "marketing_response": marketing_response,
-            "baseline_demand_factor": baseline_demand,
-            "cost_shock": cost_shock,
-            "shipping_shock": shipping_shock,
+            "elasticity": draws["elasticity"],
+            "marketing_response": draws["marketing_response"],
+            "baseline_demand_factor": draws["baseline_demand"],
+            "cost_shock": draws["cost_shock"],
+            "shipping_shock": draws["shipping_shock"],
             "revenue": revenue,
             "revenue_change": revenue - baseline["revenue"],
             "contribution_profit": contribution,
@@ -230,7 +227,7 @@ def monte_carlo_scenario(
         [
             {
                 "scenario": scenario.name,
-                "simulations": n,
+                "simulations": len(samples),
                 "median_profit_change": float(profit_change.median()),
                 "p05_profit_change": float(profit_change.quantile(0.05)),
                 "p95_profit_change": float(profit_change.quantile(0.95)),
