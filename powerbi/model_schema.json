@@ -1,10 +1,11 @@
 {
   "model": "InsightFlow Executive Analytics",
-  "version": "0.4.3.3",
+  "version": "2.0.0",
   "tables": {
     "fact_transactions": {
       "grain": "one order line",
-      "role": "fact"
+      "role": "fact",
+      "filter": "data_valid = 1 in every measure; reject_reason names why the other lines are held back"
     },
     "dim_date": {
       "key": "date",
