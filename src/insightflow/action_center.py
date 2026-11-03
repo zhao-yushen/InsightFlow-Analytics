@@ -7,12 +7,25 @@ from pathlib import Path
 import pandas as pd
 
 from .config import is_read_only
-from .diagnostics import generate_diagnostics
+from .currency import money, warehouse_currency
+from .diagnostics import TARGET_LABELS, _chooser, generate_diagnostics
 from .metrics import FilterSpec, inventory_status, target_status
-from .warehouse import connect, query_df
+from .warehouse import connect, query_df, table_exists
 
 ACTION_STATUSES = ("Open", "In Progress", "Blocked", "Done", "Dismissed")
 EDITABLE_ACTION_COLUMNS = ("owner", "due_date", "status", "resolution_note")
+ISSUE_OWNERS = {
+    "revenue_drop": "Commercial",
+    "revenue_growth": "Commercial",
+    "concentration": "Commercial",
+    "profit_pressure": "Finance",
+    "margin_floor": "Finance",
+    "target_gap": "Finance",
+    "returns_rising": "Operations",
+    "repeat_low": "CRM",
+    "reorder_risk": "Supply Chain",
+    "quality_low": "Data Analytics",
+}
 
 
 def _fingerprint(*parts: object) -> str:
@@ -21,6 +34,9 @@ def _fingerprint(*parts: object) -> str:
 
 
 def ensure_action_table(db_path: str | Path) -> None:
+    # Opening a write connection touches the file, and with it every cache's version key.
+    if table_exists(db_path, "action_register"):
+        return
     with connect(db_path) as conn:
         conn.execute(
             """
@@ -48,24 +64,29 @@ def ensure_action_table(db_path: str | Path) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_action_active ON action_register(is_active)")
 
 
-def _detected_actions(db_path: str | Path, filters: FilterSpec) -> pd.DataFrame:
-    issues, _ = generate_diagnostics(db_path, filters)
+def _scope_key(filters: FilterSpec) -> tuple[tuple[str, ...], ...]:
+    """Identify an issue's business scope; the date window and live figures are not part of it."""
+    return tuple(
+        tuple(sorted(values))
+        for values in (filters.regions, filters.countries, filters.categories, filters.channels)
+    )
+
+
+def _detected_actions(
+    db_path: str | Path, filters: FilterSpec, language: str = "zh-CN"
+) -> pd.DataFrame:
+    say = _chooser(language)
+    code = warehouse_currency(db_path)
+    issues, _ = generate_diagnostics(db_path, filters, language=language)
+    scope = _scope_key(filters)
     rows: list[dict] = []
-    owner_map = {
-        "利润": "Finance",
-        "收入": "Commercial",
-        "取消": "Operations",
-        "复购": "CRM",
-        "库存": "Supply Chain",
-        "数据": "Data Analytics",
-    }
     today = date.today()
     for issue in issues:
-        owner = next(
-            (value for key, value in owner_map.items() if key in issue.title), "Business Analytics"
-        )
+        owner = ISSUE_OWNERS.get(issue.code, "Business Analytics")
         due_days = 3 if issue.severity in {"P0", "P1"} else 10
-        fingerprint = _fingerprint("diagnostic_engine", issue.title, issue.evidence)
+        # The code stays out of the display text and live numbers stay out of the identity:
+        # the same problem seen over another period or in another language updates one action.
+        fingerprint = _fingerprint("diagnostic_engine", issue.code, scope)
         rows.append(
             {
                 "action_id": f"ACT-{fingerprint[:10].upper()}",
@@ -87,20 +108,32 @@ def _detected_actions(db_path: str | Path, filters: FilterSpec) -> pd.DataFrame:
     targets = target_status(db_path, target_month)
     if not targets.empty:
         for _, row in targets.loc[targets["status"] != "On Track"].iterrows():
-            issue = f"目标风险：{row['metric_id']}"
-            evidence = (
-                f"期间{row['target_period']}，实际值{row['actual_value']:.3f}，"
-                f"目标值{row['target_value']:.3f}，完成度{row['attainment']:.1%}"
+            metric_id = str(row["metric_id"])
+            name = say(*TARGET_LABELS.get(metric_id, (metric_id, metric_id)))
+            rate = metric_id in {"gross_margin", "cancellation_rate"}
+            actual = (
+                f"{row['actual_value']:.1%}" if rate else money(float(row["actual_value"]), code)
             )
-            fingerprint = _fingerprint("target_monitor", issue, row["target_period"])
+            goal = (
+                f"{row['target_value']:.1%}" if rate else money(float(row["target_value"]), code)
+            )
+            fingerprint = _fingerprint("target_monitor", metric_id, row["target_period"], scope)
             rows.append(
                 {
                     "action_id": f"TGT-{fingerprint[:10].upper()}",
                     "issue_fingerprint": fingerprint,
                     "severity": "P1" if row["status"] == "Off Track" else "P2",
-                    "issue": issue,
-                    "evidence": evidence,
-                    "recommended_action": "复核目标缺口并制定当期纠偏方案",
+                    "issue": say(f"目标风险：{name}", f"Target at risk: {name}"),
+                    "evidence": say(
+                        f"{row['target_period']} 实际 {actual}，目标 {goal}，"
+                        f"完成度 {row['attainment']:.1%}",
+                        f"{row['target_period']}: {actual} against {goal}, "
+                        f"{row['attainment']:.1%} attained",
+                    ),
+                    "recommended_action": say(
+                        "复核目标缺口并制定当期纠偏方案",
+                        "Review the gap and agree a correction for this period",
+                    ),
                     "owner": row["owner"],
                     "due_date": (today + timedelta(days=5)).isoformat(),
                     "status": "Open",
@@ -113,19 +146,25 @@ def _detected_actions(db_path: str | Path, filters: FilterSpec) -> pd.DataFrame:
     reorder = inventory_status(db_path, "Reorder")
     if not reorder.empty:
         for _, row in reorder.head(5).iterrows():
-            issue = f"补货风险：{row['stock_code']}"
-            evidence = (
-                f"可售{row['days_of_supply']:.1f}天，供应提前期{row['supplier_lead_days']:.0f}天"
-            )
             fingerprint = _fingerprint("inventory_monitor", row["stock_code"])
             rows.append(
                 {
                     "action_id": f"INV-{fingerprint[:10].upper()}",
                     "issue_fingerprint": fingerprint,
                     "severity": "P1",
-                    "issue": issue,
-                    "evidence": evidence,
-                    "recommended_action": "确认在途采购并计算安全库存缺口",
+                    "issue": say(
+                        f"补货风险：{row['stock_code']}", f"Reorder risk: {row['stock_code']}"
+                    ),
+                    "evidence": say(
+                        f"可售 {row['days_of_supply']:.1f} 天，"
+                        f"供应提前期 {row['supplier_lead_days']:.0f} 天",
+                        f"{row['days_of_supply']:.1f} days of cover against a "
+                        f"{row['supplier_lead_days']:.0f}-day lead time",
+                    ),
+                    "recommended_action": say(
+                        "确认在途采购并计算安全库存缺口",
+                        "Confirm purchase orders in transit and size the safety-stock gap",
+                    ),
                     "owner": "Supply Chain",
                     "due_date": (today + timedelta(days=3)).isoformat(),
                     "status": "Open",
@@ -137,15 +176,37 @@ def _detected_actions(db_path: str | Path, filters: FilterSpec) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+_COMPARED_FIELDS = ("severity", "issue", "evidence", "recommended_action", "source")
+
+
+def _needs_write(stored: pd.DataFrame, detected: pd.DataFrame, today: str) -> bool:
+    """Write only news. A write changes the warehouse version and so empties every cache."""
+    active = stored[stored["is_active"] == 1] if not stored.empty else stored
+    found = set(detected["issue_fingerprint"]) if not detected.empty else set()
+    if set(active["issue_fingerprint"]) != found:
+        return True
+    current = active.set_index("issue_fingerprint")
+    for row in detected.to_dict("records"):
+        held = current.loc[row["issue_fingerprint"]]
+        if any(str(held[field]) != str(row[field]) for field in _COMPARED_FIELDS):
+            return True
+        if abs(float(held["confidence"]) - float(row["confidence"])) > 1e-9:
+            return True
+        if str(held["last_seen_at"])[:10] != today:
+            return True
+    return False
+
+
 def sync_action_register(
     db_path: str | Path,
     filters: FilterSpec,
     *,
     persist: bool | None = None,
     include_inactive: bool = False,
+    language: str = "zh-CN",
 ) -> pd.DataFrame:
     """Synchronize current diagnostic findings while preserving human workflow state."""
-    detected = _detected_actions(db_path, filters)
+    detected = _detected_actions(db_path, filters, language)
     persist = (not is_read_only()) if persist is None else persist
     if not persist:
         if detected.empty:
@@ -155,6 +216,10 @@ def sync_action_register(
 
     ensure_action_table(db_path)
     now = datetime.now(timezone.utc).isoformat()
+    where = "" if include_inactive else "WHERE is_active=1 OR status IN ('In Progress','Blocked')"
+    stored = query_df(db_path, "SELECT * FROM action_register")
+    if not _needs_write(stored, detected, now[:10]):
+        return _sort_actions(query_df(db_path, f"SELECT * FROM action_register {where}"))
     with connect(db_path) as conn:
         conn.execute("UPDATE action_register SET is_active=0")
         for row in detected.to_dict("records"):
@@ -207,7 +272,6 @@ def sync_action_register(
                         row["resolution_note"],
                     ),
                 )
-    where = "" if include_inactive else "WHERE is_active=1 OR status NOT IN ('Done','Dismissed')"
     return _sort_actions(query_df(db_path, f"SELECT * FROM action_register {where}"))
 
 
@@ -243,11 +307,12 @@ def update_action_register(db_path: str | Path, edited: pd.DataFrame) -> int:
             if status not in ACTION_STATUSES:
                 raise ValueError(f"未知行动状态：{status}")
             due_date = pd.Timestamp(row.get("due_date")).date().isoformat()
-            resolved_at = now if status in {"Done", "Dismissed"} else None
+            closed = status in {"Done", "Dismissed"}
             cursor = conn.execute(
                 """
                 UPDATE action_register
-                SET owner=?, due_date=?, status=?, resolution_note=?, resolved_at=?
+                SET owner=?, due_date=?, status=?, resolution_note=?,
+                    resolved_at=CASE WHEN ? THEN COALESCE(resolved_at, ?) END
                 WHERE action_id=?
                 """,
                 (
@@ -255,7 +320,8 @@ def update_action_register(db_path: str | Path, edited: pd.DataFrame) -> int:
                     due_date,
                     status,
                     str(row.get("resolution_note", "") or "").strip(),
-                    resolved_at,
+                    closed,
+                    now,
                     action_id,
                 ),
             )

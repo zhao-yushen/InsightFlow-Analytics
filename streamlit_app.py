@@ -19,27 +19,30 @@ from insightflow.pages import (
     diagnostics,
     experiments,
     inventory,
+    markets,
     overview,
     planning,
+    pricing,
     products,
     profit,
     quality,
     report,
     sales,
 )
-from insightflow.ui import apply_design_system, render_app_brand
+from insightflow.ui import apply_design_system, render_app_brand, require_access
 
 ensure_directories(allow_write=not is_read_only())
 
 st.set_page_config(
-    page_title="InsightFlow · Decision Intelligence",
-    page_icon="◈",
+    page_title="InsightFlow",
+    page_icon=str(SRC / "insightflow" / "assets" / "mark.svg"),
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="auto",
 )
 
 apply_design_system()
 render_app_brand()
+require_access()
 
 pages = {
     t("nav.executive"): [
@@ -58,6 +61,12 @@ pages = {
         ),
     ],
     t("nav.diagnose"): [
+        st.Page(
+            markets.render,
+            title=t("page.markets.title"),
+            icon=":material/public:",
+            url_path="markets",
+        ),
         st.Page(
             sales.render,
             title=t("page.sales.title"),
@@ -98,6 +107,12 @@ pages = {
             title=t("page.planning.title"),
             icon=":material/event_upcoming:",
             url_path="planning",
+        ),
+        st.Page(
+            pricing.render,
+            title=t("page.pricing.title"),
+            icon=":material/sell:",
+            url_path="pricing",
         ),
         st.Page(
             decision_lab.render,
@@ -145,5 +160,5 @@ pages = {
 }
 
 
-navigation = st.navigation(pages)
+navigation = st.navigation(pages, expanded=True)
 navigation.run()

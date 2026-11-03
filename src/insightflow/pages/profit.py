@@ -1,99 +1,172 @@
 from __future__ import annotations
 
-import plotly.express as px
-import plotly.graph_objects as go
 import streamlit as st
 
 from insightflow.config import DEFAULT_DB_PATH
-from insightflow.diagnostics import profit_driver_decomposition
-from insightflow.i18n import lt, t
+from insightflow.currency import money, symbol
+from insightflow.i18n import base_period, current_language, t, tr
+from insightflow.live import gauge_strip
 from insightflow.metrics import (
     cost_waterfall,
     kpi_summary,
+    monthly_trend,
     previous_period,
     product_profitability,
 )
-from insightflow.ui import page_header, sidebar_filters
+from insightflow.pvm import price_volume_mix
+from insightflow.ui import (
+    currency_code,
+    gauge_item,
+    note,
+    page_header,
+    period_meta,
+    section_header,
+    sidebar_filters,
+    subhead,
+    table_view,
+)
+from insightflow.viz import bridge, cash_waterfall, quadrant, show
 
+COMPONENT_EN = {
+    "商品毛额": "Gross sales",
+    "折扣": "Discounts",
+    "退款": "Refunds",
+    "商品成本": "Product cost",
+    "物流成本": "Shipping",
+    "支付手续费": "Payment fees",
+    "营销费用": "Marketing",
+    "退货处理": "Return handling",
+    "贡献利润": "Contribution profit",
+}
 
 def render() -> None:
-    page_header(
-        t("page.profit.title"),
-        t("page.profit.desc"),
-        eyebrow="PROFITABILITY",
-    )
     filters = sidebar_filters(DEFAULT_DB_PATH)
+    code = currency_code()
+    prefix = symbol(code)
     current = kpi_summary(DEFAULT_DB_PATH, filters)
     previous = kpi_summary(DEFAULT_DB_PATH, previous_period(filters))
-
-    metrics = [
-        (lt("净销售额"), current["revenue"], previous["revenue"], "£{:,.0f}"),
-        (
-            lt("贡献利润"),
-            current["contribution_profit"],
-            previous["contribution_profit"],
-            "£{:,.0f}",
+    steps = price_volume_mix(DEFAULT_DB_PATH, filters, language=current_language())
+    worst = steps.sort_values("impact").iloc[0]
+    change = current["contribution_profit"] - previous["contribution_profit"]
+    page_header(
+        t("page.profit.title"),
+        tr(
+            f"贡献利润较{base_period()}变化 {money(change, code, short=True)}，"
+            f"最大的拖累是{worst['label']}（{money(worst['impact'], code, short=True)}）。",
+            f"Contribution profit moved by {money(change, code, short=True)}; the largest drag was "
+            f"{worst['label']} ({money(worst['impact'], code, short=True)}).",
         ),
-        (
-            lt("贡献利润率"),
-            current["contribution_margin"],
-            previous["contribution_margin"],
-            "{:.1%}",
+        meta=period_meta(filters),
+    )
+
+    recent = monthly_trend(DEFAULT_DB_PATH, filters.undated()).tail(12)
+
+    def item(label: str, key: str, kind: str, up_is_good: bool = True) -> dict:
+        value = current[key]
+        display = (
+            f"{value:.1%}"
+            if kind == "percent"
+            else money(value, code, decimals=2)
+            if key == "profit_per_order"
+            else money(value, code, short=True)
+        )
+        spark = recent[key].fillna(0).tolist() if key in recent.columns else None
+        return gauge_item(
+            label,
+            value,
+            kind,
+            display,
+            current=value,
+            previous=previous[key],
+            up_is_good=up_is_good,
+            spark=spark,
+            prefix=prefix,
+        )
+
+    gauge_strip(
+        [
+            item(tr("贡献利润", "Contribution profit"), "contribution_profit", "money"),
+            item(tr("贡献利润率", "Contribution margin"), "contribution_margin", "percent"),
+            item(tr("毛利率", "Gross margin"), "gross_margin", "percent"),
+            item(tr("单均利润", "Profit per order"), "profit_per_order", "money"),
+            item(tr("折扣率", "Discount rate"), "discount_rate", "percent", up_is_good=False),
+            item(tr("退款", "Refunds"), "returns_value", "money", up_is_good=False),
+        ],
+        key="profit_gauges",
+    )
+
+    section_header(tr("钱去了哪里", "Where the money went"), tr("本期从毛额到贡献利润", "Gross sales to contribution profit"))
+    waterfall = cost_waterfall(DEFAULT_DB_PATH, filters)
+    waterfall["component"] = [tr(name, COMPONENT_EN[name]) for name in waterfall["component"]]
+    show(
+        cash_waterfall(waterfall, label="component", value="value", money_prefix=prefix),
+        key="profit_waterfall",
+    )
+    table_view(waterfall.round(0))
+
+    section_header(
+        tr("利润为什么变了", "Why profit changed"),
+        tr("价格、销量、结构和成本的完整拆解，逐项加总等于实际变化", "Every step adds up to the actual change"),
+    )
+    show(
+        bridge(
+            tr("基准期利润", "Base-period profit"),
+            float(steps.attrs["start"]),
+            steps.loc[steps["impact"].abs() >= 1, ["label", "impact"]],
+            tr("本期利润", "This period"),
+            float(steps.attrs["end"]),
+            money_prefix=prefix,
         ),
-        (lt("毛利润"), current["gross_profit"], previous["gross_profit"], "£{:,.0f}"),
-        (lt("毛利率"), current["gross_margin"], previous["gross_margin"], "{:.1%}"),
-        (lt("单均利润"), current["profit_per_order"], previous["profit_per_order"], "£{:,.2f}"),
-    ]
-    for row_metrics in (metrics[:3], metrics[3:]):
-        cols = st.columns(3)
-        for col, (label, value, prev, fmt) in zip(cols, row_metrics, strict=False):
-            delta = (value - prev) / abs(prev) if prev else None
-            col.metric(label, fmt.format(value), "—" if delta is None else f"{delta:+.1%}")
-
-    left, right = st.columns(2)
-    with left:
-        st.subheader(lt("利润瀑布"))
-        waterfall = cost_waterfall(DEFAULT_DB_PATH, filters)
-        measures = ["absolute"] + ["relative"] * (len(waterfall) - 2) + ["total"]
-        fig = go.Figure(
-            go.Waterfall(
-                x=waterfall["component"],
-                y=waterfall["value"],
-                measure=measures,
-                connector={"line": {"width": 1}},
-            )
+        key="profit_bridge",
+    )
+    note(
+        tr(
+            f"未解释差额 {money(float(steps.attrs['unexplained']), code, decimals=2)}。"
+            "销量规模按基准期单位利润计，结构反映卖得多的商品变了，退货影响含退款、回收成本和处理费。",
+            f"Unexplained: {money(float(steps.attrs['unexplained']), code, decimals=2)}. Volume uses "
+            "last period's unit profit, mix reflects which products sold more, and returns include "
+            "refunds, recovered cost and handling.",
         )
-        st.plotly_chart(fig, use_container_width=True)
-    with right:
-        st.subheader(lt("贡献利润变化桥接"))
-        bridge = profit_driver_decomposition(current, previous)
-        st.plotly_chart(
-            px.bar(bridge, x="driver", y="profit_contribution", text_auto=".2s"),
-            use_container_width=True,
-        )
-        st.caption(lt("三个因素贡献之和与贡献利润前后期差额完全对账。"))
+    )
+    table_view(steps[["label", "impact"]].round(0))
 
-    st.subheader(lt("商品收入—利润矩阵"))
+    section_header(tr("商品利润地图", "Product profit map"), tr("横线和竖线是中位数", "Lines mark the medians"))
     products = product_profitability(DEFAULT_DB_PATH, filters, limit=150)
     if products.empty:
-        st.info(lt("当前筛选条件下没有商品数据。"))
+        note(tr("当前筛选条件下没有商品数据。", "No products under the current filters."))
         return
-    fig2 = px.scatter(
-        products,
-        x="revenue",
-        y="contribution_margin",
-        size="orders",
-        color="category",
-        hover_name="description",
-        hover_data=["contribution_profit", "discount_rate", "gross_margin"],
+    show(
+        quadrant(
+            products,
+            x="revenue",
+            y="contribution_margin",
+            size="orders",
+            name="description",
+            labels={"x": tr("净销售额", "Net revenue"), "y": tr("贡献利润率", "Contribution margin")},
+            money_prefix=prefix,
+        ),
+        key="profit_quadrant",
     )
-    fig2.add_hline(y=products["contribution_margin"].median(), line_dash="dash")
-    fig2.add_vline(x=products["revenue"].median(), line_dash="dash")
-    st.plotly_chart(fig2, use_container_width=True)
-
-    st.subheader(lt("高收入低利润商品"))
-    low_margin = products[
+    subhead(tr("卖得多但赚得少的商品", "Selling well, earning little"))
+    weak = products[
         (products["revenue"] >= products["revenue"].median())
         & (products["contribution_margin"] < products["contribution_margin"].median())
     ].sort_values("revenue", ascending=False)
-    st.dataframe(low_margin.head(30).round(3), use_container_width=True, hide_index=True)
+    columns = {
+        "description": tr("商品", "Product"),
+        "category": tr("品类", "Category"),
+        "revenue": tr("净销售额", "Net revenue"),
+        "contribution_margin": tr("贡献利润率", "Contribution margin"),
+        "discount_rate": tr("折扣率", "Discount rate"),
+        "returns_value": tr("退款", "Refunds"),
+    }
+    st.dataframe(
+        weak.head(30)[list(columns)].rename(columns=columns),
+        hide_index=True,
+        column_config={
+            columns["revenue"]: st.column_config.NumberColumn(format="%,.0f"),
+            columns["contribution_margin"]: st.column_config.NumberColumn(format="percent"),
+            columns["discount_rate"]: st.column_config.NumberColumn(format="percent"),
+            columns["returns_value"]: st.column_config.NumberColumn(format="%,.0f"),
+        },
+    )

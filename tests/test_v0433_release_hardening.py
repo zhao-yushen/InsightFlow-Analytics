@@ -8,7 +8,7 @@ import pytest
 
 import insightflow.watcher as watcher
 from insightflow.etl import clean_transactions, load_source, read_excel_transactions
-from insightflow.warehouse import connect
+from insightflow.warehouse import connect, query_df
 
 
 def _valid_rows() -> pd.DataFrame:
@@ -54,7 +54,7 @@ def test_excel_without_transaction_sheet_raises_clear_error(tmp_path: Path) -> N
         read_excel_transactions(path)
 
 
-def test_watcher_rejects_p1_contract_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def _watch_folders(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, Path]:
     incoming = tmp_path / "incoming"
     processing = tmp_path / "processing"
     archive = tmp_path / "archive"
@@ -64,16 +64,59 @@ def test_watcher_rejects_p1_contract_file(tmp_path: Path, monkeypatch: pytest.Mo
     monkeypatch.setattr(watcher, "PROCESSING_DIR", processing)
     monkeypatch.setattr(watcher, "ARCHIVE_DIR", archive)
     monkeypatch.setattr(watcher, "REJECTED_DIR", rejected)
+    return incoming, archive, rejected
 
+
+def test_watcher_rejects_a_file_that_is_mostly_bad(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    incoming, archive, rejected = _watch_folders(tmp_path, monkeypatch)
     bad = _valid_rows()
     bad.loc[0, "unit_price"] = 0
     source = incoming / "bad.csv"
     bad.to_csv(source, index=False)
-    with pytest.raises(ValueError, match="数据契约阻止导入"):
+    with pytest.raises(ValueError, match="不符合契约"):
         watcher.process_incoming_file(source, tmp_path / "warehouse.db")
     assert not list(archive.glob("*"))
     assert list(rejected.glob("*_bad.csv"))
     assert list(rejected.glob("*.error.json"))
+
+
+def test_watcher_sets_a_few_bad_rows_aside_and_keeps_the_feed_running(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    incoming, archive, _ = _watch_folders(tmp_path, monkeypatch)
+    rows = pd.concat(
+        [_valid_rows().assign(invoice_no=f"INV-{index}") for index in range(5)], ignore_index=True
+    )
+    rows.loc[0, "unit_price"] = 0
+    source = incoming / "mixed.csv"
+    rows.to_csv(source, index=False)
+    result = watcher.process_incoming_file(source, tmp_path / "warehouse.db")
+    assert result["status"] == "archived"
+    assert list(archive.glob("*_mixed.csv"))
+    kept = query_df(tmp_path / "warehouse.db", "SELECT COUNT(*) FROM v_ledger").iloc[0, 0]
+    set_aside = query_df(
+        tmp_path / "warehouse.db",
+        "SELECT reject_reason FROM fact_transactions WHERE data_valid = 0",
+    )
+    assert kept == 4
+    assert set_aside["reject_reason"].tolist() == ["unit_price/min_exclusive"]
+
+
+def test_strict_mode_refuses_any_contract_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    incoming, _, _ = _watch_folders(tmp_path, monkeypatch)
+    monkeypatch.setenv("INSIGHTFLOW_STRICT_IMPORT", "true")
+    rows = pd.concat(
+        [_valid_rows().assign(invoice_no=f"INV-{index}") for index in range(5)], ignore_index=True
+    )
+    rows.loc[0, "unit_price"] = 0
+    source = incoming / "strict.csv"
+    rows.to_csv(source, index=False)
+    with pytest.raises(ValueError, match="数据契约阻止导入"):
+        watcher.process_incoming_file(source, tmp_path / "warehouse.db")
 
 
 def test_watcher_archives_valid_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

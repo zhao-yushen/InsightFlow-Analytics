@@ -8,59 +8,113 @@ import pandas as pd
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Inches, Pt
-from jinja2 import Template
+from jinja2 import Environment
+from markupsafe import Markup
 
 from .ai_assistant import executive_summary
+from .config import DEFAULT_CURRENCY
+from .currency import money
 from .diagnostics import DiagnosticIssue
 
-HTML_TEMPLATE = Template(
+# Report text can quote uploaded names, so everything is escaped unless marked safe.
+HTML_TEMPLATE = Environment(autoescape=True).from_string(
     """
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>InsightFlow 经营分析报告</title>
 <style>
-body{font-family:Arial,"Microsoft YaHei",sans-serif;background:#f5f7fb;color:#182235;margin:0}
-.container{max-width:1180px;margin:0 auto;padding:30px}.hero{background:#17243d;color:white;border-radius:18px;padding:28px}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin:20px 0}
-.card{background:white;border-radius:14px;padding:18px;box-shadow:0 4px 18px rgba(20,34,70,.06)}
-.label{font-size:13px;color:#68738a}.value{font-size:27px;font-weight:700;margin-top:8px}
-section{margin-top:24px}.issue{border-left:5px solid #7b879d}.P0,.P1{border-left-color:#c23632}.P2{border-left-color:#d17d00}.P3{border-left-color:#287d4b}
-table{width:100%;border-collapse:collapse;background:white;font-size:13px}th,td{padding:9px;border-bottom:1px solid #e9edf4;text-align:left}th{background:#f0f3f8}
-.small{font-size:12px;color:#aab3c2}.summary{white-space:pre-wrap;line-height:1.7}.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
-@media(max-width:800px){.grid{grid-template-columns:1fr}}
-</style></head><body><div class="container">
-<div class="hero"><h1>InsightFlow 经营分析与决策报告</h1>
-<p class="small">分析期间：{{ period }}｜生成时间：{{ generated_at }}｜摘要引擎：{{ summary_engine }}</p>
-<p class="small">数据状态：{{ data_profile }}</p>
-<div class="summary">{{ summary }}</div></div>
-<div class="kpis">{% for label,value in kpis %}<div class="card"><div class="label">{{ label }}</div><div class="value">{{ value }}</div></div>{% endfor %}</div>
-<section><h2>关键诊断与行动</h2>{% for issue in issues %}<div class="card issue {{ issue.severity }}"><b>{{ issue.severity }} · {{ issue.title }}</b><p>{{ issue.finding }}</p><p><b>证据：</b>{{ issue.evidence }}</p><p><b>建议：</b>{{ issue.recommendation }}</p></div>{% endfor %}</section>
-<div class="grid"><section><h2>收入变化驱动</h2>{{ drivers_table }}</section><section><h2>利润与成本结构</h2>{{ profit_table }}</section></div>
+:root{--ink:#0F2747;--soft:#4A6283;--line:#D9E2EE;--flow:#0E8C7E;--profit:#B57F00;--leak:#C8483A}
+*{box-sizing:border-box}
+body{font-family:"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:#fff;color:var(--ink);margin:0;line-height:1.65}
+main{max-width:1040px;margin:0 auto;padding:40px 24px 64px}
+h1{font-size:32px;line-height:1.2;letter-spacing:-.02em;margin:0}
+h2{font-size:19px;margin:0 0 12px;padding-top:18px;border-top:1px solid var(--line)}
+section{margin-top:32px}
+.meta{color:var(--soft);font-size:14px;margin:10px 0 0}
+.summary{white-space:pre-wrap;font-size:16px;margin:20px 0 0}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-top:28px}
+.kpi{padding:14px 12px 14px 0}
+.label{font-size:13px;color:var(--soft)}
+.value{font-size:24px;font-weight:600;letter-spacing:-.02em}
+.issue{padding:12px 0;border-bottom:1px solid var(--line);break-inside:avoid}
+.issue b{display:block}
+.issue .level{font-size:13px;color:var(--soft)}
+.issue p{margin:4px 0 0;font-size:14px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:8px 10px 8px 0;border-bottom:1px solid var(--line);text-align:left;font-variant-numeric:tabular-nums}
+th{color:var(--soft);font-weight:500}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:32px}
+svg{display:block;width:100%;height:auto}
+.legend{font-size:13px;color:var(--soft);margin-top:6px}
+.legend i{display:inline-block;width:14px;height:2px;vertical-align:middle;margin:0 6px 0 14px}
+.legend i:first-child{margin-left:0}
+@media(max-width:760px){.grid{grid-template-columns:1fr}main{padding:24px 16px}}
+@media print{main{padding:0;max-width:none}section{break-inside:avoid}}
+</style></head><body><main>
+<h1>InsightFlow 经营分析与决策报告</h1>
+<p class="meta">分析期间：{{ period }}。生成时间：{{ generated_at }}。摘要来源：{{ summary_engine }}。</p>
+<p class="meta">{{ data_profile }}</p>
+<div class="summary">{{ summary }}</div>
+<div class="kpis">{% for label,value in kpis %}<div class="kpi"><div class="label">{{ label }}</div><div class="value">{{ value }}</div></div>{% endfor %}</div>
+<section><h2>月度趋势</h2>{{ trend_chart }}</section>
+<section><h2>关键诊断与行动</h2>{% for issue in issues %}<div class="issue"><span class="level">{{ issue.severity }}</span><b>{{ issue.title }}</b><p>{{ issue.finding }}</p><p>证据：{{ issue.evidence }}</p><p>建议：{{ issue.recommendation }}</p></div>{% endfor %}</section>
+<div class="grid"><section><h2>收入变化驱动</h2>{{ drivers_table }}</section><section><h2>利润变化驱动</h2>{{ profit_table }}</section></div>
 <div class="grid"><section><h2>目标状态</h2>{{ targets_table }}</section><section><h2>未来预测</h2>{{ forecast_table }}</section></div>
 <div class="grid"><section><h2>库存风险</h2>{{ inventory_table }}</section><section><h2>数据质量</h2>{{ quality_table }}</section></div>
-<section><h2>月度趋势</h2>{{ trend_table }}</section>
-</div></body></html>
+<section><h2>月度明细</h2>{{ trend_table }}</section>
+</main></body></html>
 """
 )
 
 
-def format_kpis(kpi: dict[str, float]) -> list[tuple[str, str]]:
+def format_kpis(kpi: dict[str, float], currency: str = DEFAULT_CURRENCY) -> list[tuple[str, str]]:
     return [
-        ("净销售额", f"£{kpi['revenue']:,.0f}"),
-        ("毛利润", f"£{kpi.get('gross_profit', 0):,.0f}"),
+        ("净销售额", money(kpi["revenue"], currency)),
+        ("毛利润", money(kpi.get("gross_profit", 0), currency)),
         ("毛利率", f"{kpi.get('gross_margin', 0):.1%}"),
-        ("贡献利润", f"£{kpi.get('contribution_profit', 0):,.0f}"),
+        ("贡献利润", money(kpi.get("contribution_profit", 0), currency)),
         ("贡献利润率", f"{kpi.get('contribution_margin', 0):.1%}"),
+        ("退款", money(kpi.get("returns_value", 0), currency)),
         ("订单量", f"{kpi['orders']:,.0f}"),
         ("活跃客户", f"{kpi['active_customers']:,.0f}"),
         ("复购率", f"{kpi['repeat_rate']:.1%}"),
-        ("取消率", f"{kpi['cancellation_rate']:.1%}"),
+        ("退货取消率", f"{kpi['cancellation_rate']:.1%}"),
     ]
+
+
+def trend_svg(trend: pd.DataFrame) -> str:
+    """Draw the revenue and profit trend as inline SVG so the report stays self-contained."""
+    data = trend.tail(18)
+    if len(data) < 2 or "revenue" not in data:
+        return "<p class='meta'>月份不足，暂无趋势图。</p>"
+    width, height, pad = 960, 220, 8
+    top = max(float(data["revenue"].max()), 1.0)
+    low = min(float(data["contribution_profit"].min()), 0.0)
+
+    def points(column: str) -> str:
+        coordinates = []
+        for index, value in enumerate(data[column].astype(float)):
+            x = pad + index * (width - 2 * pad) / (len(data) - 1)
+            y = height - pad - (value - low) / (top - low) * (height - 2 * pad)
+            coordinates.append(f"{x:.1f},{y:.1f}")
+        return " ".join(coordinates)
+
+    return (
+        f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="净销售额与贡献利润月度趋势">'
+        f'<line x1="{pad}" x2="{width - pad}" y1="{height - pad}" y2="{height - pad}" stroke="#D9E2EE"/>'
+        f'<polyline points="{points("revenue")}" fill="none" stroke="#0E8C7E" stroke-width="2"/>'
+        f'<polyline points="{points("contribution_profit")}" fill="none" stroke="#B57F00" stroke-width="2"/>'
+        "</svg>"
+        f'<div class="legend"><i style="background:#0E8C7E"></i>净销售额'
+        f'<i style="background:#B57F00"></i>贡献利润'
+        f"（{data['month'].iloc[0]} 至 {data['month'].iloc[-1]}）</div>"
+    )
 
 
 def present_drivers(drivers: pd.DataFrame) -> pd.DataFrame:
     labels = {
         "driver": "驱动因素",
-        "previous": "上期",
+        "previous": "基准期",
         "current": "本期",
         "change": "变化",
         "revenue_contribution": "净销售额贡献",
@@ -126,9 +180,22 @@ def present_quality(df: pd.DataFrame | None) -> pd.DataFrame:
     return df[[c for c in labels if c in df.columns]].rename(columns=labels).copy()
 
 
+def present_trend(df: pd.DataFrame) -> pd.DataFrame:
+    labels = {
+        "month": "月份",
+        "revenue": "净销售额",
+        "gross_profit": "毛利润",
+        "contribution_profit": "贡献利润",
+        "orders": "订单",
+        "active_customers": "活跃客户",
+        "cancellation_rate": "退货取消率",
+    }
+    return df[[c for c in labels if c in df.columns]].tail(12).rename(columns=labels).copy()
+
+
 def _safe_table(df: pd.DataFrame | None, empty_text: str = "暂无数据") -> str:
     if df is None or df.empty:
-        return f"<div class='card'>{empty_text}</div>"
+        return f"<p class='meta'>{empty_text}</p>"
     return df.round(3).to_html(index=False, border=0)
 
 
@@ -141,6 +208,7 @@ def build_markdown_report(
     targets: pd.DataFrame | None = None,
     forecast: pd.DataFrame | None = None,
     data_profile: str | None = None,
+    currency: str = DEFAULT_CURRENCY,
 ) -> str:
     summary, engine = executive_summary(issues)
     lines = [
@@ -158,7 +226,7 @@ def build_markdown_report(
         "## 核心指标",
         "",
     ]
-    for label, value in format_kpis(kpi):
+    for label, value in format_kpis(kpi, currency):
         lines.append(f"- **{label}**：{value}")
     lines.extend(["", "## 关键诊断", ""])
     for issue in issues:
@@ -195,6 +263,7 @@ def render_html_report(
     inventory: pd.DataFrame | None = None,
     quality: pd.DataFrame | None = None,
     data_profile: str | None = None,
+    currency: str = DEFAULT_CURRENCY,
 ) -> str:
     summary, engine = executive_summary(issues)
     return HTML_TEMPLATE.render(
@@ -203,15 +272,16 @@ def render_html_report(
         summary_engine=engine,
         summary=summary,
         data_profile=data_profile or "未提供来源标签",
-        kpis=format_kpis(kpi),
+        kpis=format_kpis(kpi, currency),
         issues=issues,
-        drivers_table=_safe_table(present_drivers(drivers)),
-        profit_table=_safe_table(profit_table),
-        targets_table=_safe_table(present_targets(targets)),
-        forecast_table=_safe_table(present_forecast(forecast)),
-        inventory_table=_safe_table(present_inventory(inventory)),
-        quality_table=_safe_table(present_quality(quality)),
-        trend_table=_safe_table(trend.tail(12)),
+        drivers_table=Markup(_safe_table(present_drivers(drivers))),
+        profit_table=Markup(_safe_table(profit_table)),
+        targets_table=Markup(_safe_table(present_targets(targets))),
+        forecast_table=Markup(_safe_table(present_forecast(forecast))),
+        inventory_table=Markup(_safe_table(present_inventory(inventory))),
+        quality_table=Markup(_safe_table(present_quality(quality))),
+        trend_table=Markup(_safe_table(present_trend(trend))),
+        trend_chart=Markup(trend_svg(trend)),
     )
 
 
@@ -265,6 +335,7 @@ def _create_word_report(
     inventory: pd.DataFrame | None = None,
     quality: pd.DataFrame | None = None,
     data_profile: str | None = None,
+    currency: str = DEFAULT_CURRENCY,
 ) -> Document:
     summary, engine = executive_summary(issues)
     doc = Document()
@@ -292,17 +363,18 @@ def _create_word_report(
     kpi_table.rows[0].cells[1].text = "数值"
     kpi_table.rows[0].cells[2].text = "经营含义"
     meanings = {
-        "净销售额": "扣除折扣后的有效销售收入",
+        "净销售额": "商品毛额扣除折扣和退款",
         "毛利润": "净销售额扣除商品成本",
         "毛利率": "商品结构与采购成本质量",
-        "贡献利润": "进一步扣除物流、支付和营销费用",
+        "贡献利润": "进一步扣除物流、支付、营销和退货处理费用",
         "贡献利润率": "规模增长是否真正创造利润",
+        "退款": "退货与取消退还的金额",
         "订单量": "交易规模",
         "活跃客户": "产生有效购买的客户数",
         "复购率": "客户质量与收入可持续性",
-        "取消率": "履约和商品质量风险",
+        "退货取消率": "退货或取消单数占销售订单的比例",
     }
-    for label, value in format_kpis(kpi):
+    for label, value in format_kpis(kpi, currency):
         cells = kpi_table.add_row().cells
         cells[0].text = label
         cells[1].text = value
@@ -337,12 +409,13 @@ def _create_word_report(
 
     doc.add_heading("十、核心指标口径", level=1)
     definitions = [
-        "净销售额：有效正向交易商品毛额减折扣金额。",
+        "净销售额：商品毛额减折扣，再减退款。",
         "毛利润：净销售额减商品成本。",
         "贡献利润：毛利润减物流、支付手续费、营销费用和退货处理成本。",
         "复购率：期间内订单数不少于2笔的客户占购买客户比例。",
         "收入驱动：采用Shapley方法，将收入变化分解为活跃客户、购买频次和客单价贡献。",
-        "预测：在多个基线模型中通过滚动回测选择误差最低模型，并给出不确定区间。",
+        "预测：在多个时序模型中通过滚动回测选择误差最低模型，并给出不确定区间。",
+        "退货：退货是对原销售的反向记录，商品回库比例可通过配置调整。",
     ]
     for item in definitions:
         doc.add_paragraph(item, style="List Bullet")

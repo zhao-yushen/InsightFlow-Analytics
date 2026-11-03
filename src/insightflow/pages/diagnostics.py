@@ -1,72 +1,116 @@
 from __future__ import annotations
 
-import plotly.express as px
 import streamlit as st
 
 from insightflow.config import DEFAULT_DB_PATH
+from insightflow.currency import symbol
 from insightflow.diagnostics import (
     dimension_change,
     generate_diagnostics,
     monthly_anomalies,
     profit_driver_decomposition,
 )
-from insightflow.i18n import lt, t
+from insightflow.i18n import current_language, t, tr
 from insightflow.metrics import kpi_summary, previous_period
-from insightflow.ui import page_header, sidebar_filters
+from insightflow.ui import (
+    currency_code,
+    note,
+    page_header,
+    period_meta,
+    section_header,
+    sidebar_filters,
+    signal,
+    subhead,
+    table_view,
+)
+from insightflow.viz import show, signed_bars
 
 
 def render() -> None:
+    filters = sidebar_filters(DEFAULT_DB_PATH)
+    prefix = symbol(currency_code())
+    language = current_language()
+    issues, revenue_drivers = generate_diagnostics(DEFAULT_DB_PATH, filters, language=language)
+    urgent = [issue for issue in issues if issue.severity in {"P0", "P1"}]
     page_header(
         t("page.diagnostics.title"),
-        t("page.diagnostics.desc"),
-        eyebrow="ROOT CAUSE ANALYSIS",
+        (
+            tr(f"发现 {len(issues)} 个信号，其中 {len(urgent)} 个需要优先处理。", f"{len(issues)} signals found, {len(urgent)} needing priority attention.")
+            if issues
+            else tr("样本太小或没有信号达到阈值。", "The sample is too small or nothing crossed a threshold.")
+        ),
+        meta=period_meta(filters),
     )
-    filters = sidebar_filters(DEFAULT_DB_PATH)
-    issues, revenue_drivers = generate_diagnostics(DEFAULT_DB_PATH, filters)
 
     for issue in issues:
-        with st.expander(
-            f"{issue.severity}｜{issue.title}", expanded=issue.severity in {"P0", "P1"}
-        ):
-            st.write(issue.finding)
-            st.markdown(f"{lt('**证据：** ')}{issue.evidence}")
-            st.markdown(f"{lt('**建议：** ')}{issue.recommendation}")
-            st.caption(f"{lt('规则置信度：')}{issue.confidence:.0%}")
-
-    cols = st.columns(2)
-    with cols[0]:
-        st.subheader(lt("收入变化驱动"))
-        st.plotly_chart(
-            px.bar(revenue_drivers, x="driver", y="revenue_contribution", text_auto=".2s"),
-            use_container_width=True,
+        signal(
+            issue.severity,
+            issue.title,
+            f"{issue.finding} {tr('证据：', 'Evidence: ')}{issue.evidence} "
+            f"{tr('建议：', 'Next step: ')}{issue.recommendation}",
         )
-    with cols[1]:
-        st.subheader(lt("贡献利润变化驱动"))
-        profit_drivers = profit_driver_decomposition(
+
+    section_header(tr("变化由什么驱动", "What drove the change"), tr("逐项加总等于实际变化", "Each set adds up to the actual change"))
+    left, right = st.columns(2, gap="large")
+    with left:
+        subhead(tr("净销售额", "Net revenue"))
+        show(
+            signed_bars(revenue_drivers, label="driver", value="revenue_contribution", money_prefix=prefix),
+            key="diagnostics_revenue",
+        )
+    with right:
+        subhead(tr("贡献利润", "Contribution profit"))
+        drivers = profit_driver_decomposition(
             kpi_summary(DEFAULT_DB_PATH, filters),
             kpi_summary(DEFAULT_DB_PATH, previous_period(filters)),
+            language=language,
         )
-        st.plotly_chart(
-            px.bar(profit_drivers, x="driver", y="profit_contribution", text_auto=".2s"),
-            use_container_width=True,
+        show(
+            signed_bars(drivers, label="driver", value="profit_contribution", money_prefix=prefix),
+            key="diagnostics_profit",
         )
 
-    st.subheader(lt("结构贡献定位"))
-    dimension = st.selectbox(
-        lt("维度"),
-        ["country", "category", "channel"],
-        format_func={"country": lt("国家/地区"), "category": lt("品类"), "channel": lt("渠道")}.get,
-    )
-    change = dimension_change(DEFAULT_DB_PATH, filters, dimension, limit=50)
-    metric = st.radio(lt("变化指标"), ["change", "profit_change"], horizontal=True)
-    st.plotly_chart(
-        px.bar(change.sort_values(metric), x=metric, y=dimension, orientation="h"),
-        use_container_width=True,
-    )
+    section_header(tr("问题出在哪里", "Where it happened"))
+    labels = {
+        "country": tr("国家/地区", "Market"),
+        "category": tr("品类", "Category"),
+        "channel": tr("渠道", "Channel"),
+    }
+    metrics = {"change": tr("净销售额变化", "Net revenue change"), "profit_change": tr("贡献利润变化", "Profit change")}
+    controls = st.columns(2)
+    with controls[0]:
+        dimension = st.segmented_control(
+            tr("维度", "Dimension"),
+            list(labels),
+            default="country",
+            format_func=labels.get,
+            key="diagnostics_dimension",
+        )
+    with controls[1]:
+        metric = st.segmented_control(
+            tr("指标", "Metric"),
+            list(metrics),
+            default="change",
+            format_func=metrics.get,
+            key="diagnostics_metric",
+        )
+    chosen = dimension or "country"
+    change = dimension_change(DEFAULT_DB_PATH, filters, chosen, limit=16)
+    show(signed_bars(change, label=chosen, value=metric or "change", money_prefix=prefix), key="diagnostics_where")
+    table_view(change.round(2))
 
-    st.subheader(lt("历史异常月份"))
-    anomalies = monthly_anomalies(DEFAULT_DB_PATH)
+    section_header(tr("历史异常月份", "Unusual months"), tr("用中位数偏差识别，不受极端值影响", "Median-based, so extremes cannot hide"))
+    anomalies = monthly_anomalies(DEFAULT_DB_PATH, filters.undated())
     if anomalies.empty:
-        st.info(lt("未发现满足阈值的历史异常月份。"))
+        note(tr("没有月份超过异常阈值。", "No month crossed the anomaly threshold."))
     else:
-        st.dataframe(anomalies.round(2), use_container_width=True, hide_index=True)
+        columns = [
+            "month",
+            "revenue",
+            "contribution_profit",
+            "cancellation_rate",
+            "revenue_robust_z",
+            "contribution_profit_robust_z",
+            "cancellation_rate_robust_z",
+        ]
+        st.dataframe(anomalies[columns].round(3), hide_index=True)

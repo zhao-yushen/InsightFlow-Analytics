@@ -130,17 +130,64 @@ def _discount_rate(
     return float(np.clip(rng.normal(base, 0.018), 0, 0.22))
 
 
+def _customer_book(
+    rng: np.random.Generator, n_customers: int, n_days: int
+) -> dict[str, np.ndarray]:
+    """Give customers a start, a lifetime and a buying rate, so churn is learnable."""
+    return {
+        "join_day": rng.integers(-240, max(2, int(n_days * 0.85)), size=n_customers),
+        "lifetime": rng.exponential(460.0, size=n_customers) + 30,
+        "rate": rng.lognormal(0.0, 0.9, size=n_customers),
+        "country": rng.choice(len(COUNTRIES), size=n_customers, p=COUNTRY_WEIGHTS),
+        "channel": rng.choice(len(CHANNELS), size=n_customers, p=CHANNEL_WEIGHTS),
+    }
+
+
+def _active_weights(book: dict[str, np.ndarray], day: int) -> np.ndarray:
+    active = (book["join_day"] <= day) & (day < book["join_day"] + book["lifetime"])
+    weights = book["rate"] * active
+    total = weights.sum()
+    if total <= 0:
+        return book["rate"] / book["rate"].sum()
+    return weights / total
+
+
+def _complement_pairs(rng: np.random.Generator, products: pd.DataFrame) -> np.ndarray:
+    """Pair some products within a category so baskets carry a real attachment signal."""
+    partner = np.full(len(products), -1, dtype=int)
+    for _, group in products.groupby("category"):
+        members = rng.permutation(group.index.to_numpy())
+        for left, right in zip(members[:-1:2], members[1::2], strict=False):
+            if rng.random() < 0.55:
+                partner[left], partner[right] = right, left
+    return partner
+
+
 def generate_demo_transactions(config: DemoConfig | None = None) -> pd.DataFrame:
     config = config or DemoConfig()
     rng = np.random.default_rng(config.seed)
     dates = pd.date_range(config.start, config.end, freq="D")
+    last_date = dates[-1]
     products = _product_catalog(rng, config.n_products)
-    customer_ids = np.arange(10000, 10000 + config.n_customers)
+    book = _customer_book(rng, config.n_customers, len(dates))
+    partner = _complement_pairs(rng, products)
 
+    # Weekly promotions move price, and price moves demand through each product's
+    # elasticity. Estimating elasticity from this ledger therefore recovers real signal.
+    n_weeks = len(dates) // 7 + 2
+    on_promotion = rng.random((config.n_products, n_weeks)) < 0.14
+    depth = rng.uniform(0.80, 0.94, size=(config.n_products, n_weeks))
+    price_index = np.where(on_promotion, depth, 1.0)
+    elasticity = products["price_elasticity"].to_numpy()
+    popularity = products["product_weight"].to_numpy()
+    pick_weights = popularity[:, None] * price_index ** elasticity[:, None]
+    pick_weights = pick_weights / pick_weights.sum(axis=0, keepdims=True)
+
+    catalog = products.to_dict("records")
     rows: list[dict] = []
     invoice_counter = 100000
 
-    for date in dates:
+    for day, date in enumerate(dates):
         month = date.month
         weekday = date.weekday()
         seasonal = 1.0
@@ -160,41 +207,61 @@ def generate_demo_transactions(config: DemoConfig | None = None) -> pd.DataFrame
         n_orders = max(
             config.min_daily_orders, int(rng.poisson(config.base_daily_orders * seasonal))
         )
-        for _ in range(n_orders):
+        buyers = rng.choice(config.n_customers, size=n_orders, p=_active_weights(book, day))
+        week = day // 7
+        for buyer in buyers:
             invoice_counter += 1
-            country = str(rng.choice(COUNTRIES, p=COUNTRY_WEIGHTS))
-            channel = str(rng.choice(CHANNELS, p=CHANNEL_WEIGHTS))
-            customer_id = int(rng.choice(customer_ids))
+            country = COUNTRIES[int(book["country"][buyer])]
+            channel = (
+                CHANNELS[int(book["channel"][buyer])]
+                if rng.random() < 0.8
+                else str(rng.choice(CHANNELS, p=CHANNEL_WEIGHTS))
+            )
+            customer_id = 10000 + int(buyer)
             n_lines = int(np.clip(rng.poisson(2.3) + 1, 1, min(10, config.n_products)))
+            picked = list(
+                rng.choice(
+                    config.n_products, size=n_lines, replace=False, p=pick_weights[:, week]
+                )
+            )
+            for product_idx in list(picked):
+                companion = int(partner[product_idx])
+                if companion >= 0 and companion not in picked and rng.random() < 0.4:
+                    picked.append(companion)
 
             cancel_prob = 0.022
             if country == "Germany" and date >= pd.Timestamp("2025-11-01"):
                 cancel_prob = 0.09
-            is_cancel = bool(rng.random() < cancel_prob)
-            invoice_no = f"C{invoice_counter}" if is_cancel else str(invoice_counter)
-
-            picked = rng.choice(
-                products.index,
-                size=n_lines,
-                replace=False,
-                p=products["product_weight"].to_numpy(),
-            )
+            is_returned = bool(rng.random() < cancel_prob)
+            ordered_at = date + pd.to_timedelta(int(rng.integers(8, 21)), unit="h")
+            shared = {
+                "customer_id": customer_id,
+                "country": country,
+                "market_region": market_region(country),
+                "channel": channel,
+            }
+            order_rows: list[dict] = []
             for product_idx in picked:
-                product = products.loc[product_idx]
+                product = catalog[int(product_idx)]
+                category = str(product["category"])
                 quantity = int(np.clip(rng.geometric(0.42), 1, 18))
                 if channel == "Wholesale":
                     quantity = int(np.clip(quantity * rng.integers(2, 6), 2, 60))
-                signed_quantity = -quantity if is_cancel else quantity
-                price_noise = rng.normal(1.0, 0.045)
-                unit_price = round(max(0.2, float(product["base_price"]) * price_noise), 2)
-                discount_rate = _discount_rate(rng, date, channel, str(product["category"]))
+                price_noise = rng.normal(1.0, 0.012)
+                unit_price = round(
+                    max(
+                        0.2,
+                        float(product["base_price"])
+                        * float(price_index[int(product_idx), week])
+                        * price_noise,
+                    ),
+                    2,
+                )
+                discount_rate = _discount_rate(rng, date, channel, category)
 
                 # Cost pressure is intentionally introduced in late 2025.
                 cost_pressure = 1.0
-                if date >= pd.Timestamp("2025-09-01") and str(product["category"]) in {
-                    "Seasonal",
-                    "Home Decor",
-                }:
+                if date >= pd.Timestamp("2025-09-01") and category in {"Seasonal", "Home Decor"}:
                     cost_pressure = 1.10
                 unit_cost = round(float(product["unit_cost"]) * cost_pressure, 2)
 
@@ -229,34 +296,49 @@ def generate_demo_transactions(config: DemoConfig | None = None) -> pd.DataFrame
                 }[channel]
                 payment_fee = round(gross_value * (1 - discount_rate) * payment_fee_rate, 2)
                 marketing_cost = round(gross_value * marketing_rate * rng.uniform(0.85, 1.15), 2)
-                return_processing_cost = round(rng.uniform(2.0, 6.5), 2) if is_cancel else 0.0
-
-                rows.append(
+                order_rows.append(
                     {
-                        "invoice_no": invoice_no,
+                        "invoice_no": str(invoice_counter),
                         "stock_code": product["stock_code"],
                         "description": product["description"],
-                        "category": product["category"],
-                        "quantity": signed_quantity,
-                        "invoice_date": date + pd.to_timedelta(int(rng.integers(8, 21)), unit="h"),
+                        "category": category,
+                        "quantity": quantity,
+                        "invoice_date": ordered_at,
                         "unit_price": unit_price,
                         "discount_rate": round(discount_rate, 4),
                         "unit_cost": unit_cost,
                         "shipping_cost": shipping_cost,
                         "payment_fee": payment_fee,
                         "marketing_cost": marketing_cost,
-                        "return_processing_cost": return_processing_cost,
+                        "return_processing_cost": 0.0,
                         "price_elasticity": round(float(product["price_elasticity"]), 3),
                         "supplier": product["supplier"],
                         "supplier_lead_days": int(product["supplier_lead_days"]),
                         "inventory_on_hand": int(product["inventory_on_hand"]),
                         "reorder_point": int(product["reorder_point"]),
-                        "customer_id": customer_id,
-                        "country": country,
-                        "market_region": market_region(country),
-                        "channel": channel,
+                        **shared,
                     }
                 )
+            rows.extend(order_rows)
+            if is_returned:
+                # A return arrives later and undoes the sale; only handling is new money.
+                returned_at = min(
+                    ordered_at + pd.to_timedelta(int(rng.integers(1, 15)), unit="D"),
+                    last_date + pd.to_timedelta(20, unit="h"),
+                )
+                for line in order_rows:
+                    rows.append(
+                        {
+                            **line,
+                            "invoice_no": f"C{invoice_counter}",
+                            "quantity": -int(line["quantity"]),
+                            "invoice_date": returned_at,
+                            "shipping_cost": 0.0,
+                            "payment_fee": 0.0,
+                            "marketing_cost": 0.0,
+                            "return_processing_cost": round(float(rng.uniform(2.0, 6.5)), 2),
+                        }
+                    )
 
     df = pd.DataFrame(rows)
 

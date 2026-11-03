@@ -38,12 +38,17 @@ def _build(tmp_path: Path) -> tuple[Path, FilterSpec]:
 def test_unit_economics_reconcile(tmp_path: Path):
     db, filters = _build(tmp_path)
     kpi = kpi_summary(db, filters)
-    assert math.isclose(kpi["revenue"], kpi["gross_revenue"] - kpi["discount_amount"], abs_tol=0.1)
-    assert math.isclose(kpi["gross_profit"], kpi["revenue"] - kpi["cogs"], abs_tol=0.1)
+    net_of_returns = kpi["gross_revenue"] - kpi["discount_amount"] - kpi["returns_value"]
+    assert math.isclose(kpi["revenue"], net_of_returns, abs_tol=0.01)
+    assert math.isclose(kpi["gross_profit"], kpi["revenue"] - kpi["cogs"], abs_tol=0.01)
     expected = (
-        kpi["gross_profit"] - kpi["shipping_cost"] - kpi["payment_fee"] - kpi["marketing_cost"]
+        kpi["gross_profit"]
+        - kpi["shipping_cost"]
+        - kpi["payment_fee"]
+        - kpi["marketing_cost"]
+        - kpi["return_processing_cost"]
     )
-    assert math.isclose(kpi["contribution_profit"], expected, abs_tol=0.1)
+    assert math.isclose(kpi["contribution_profit"], expected, abs_tol=0.01)
 
 
 def test_profit_bridge_and_baseline_scenario_reconcile(tmp_path: Path):

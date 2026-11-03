@@ -1,20 +1,55 @@
-# InsightFlow Pro v0.4 Architecture
+# Architecture
 
-## Layers
+```text
+Sources         CSV, TSV, Excel, Parquet, JSON, seven-table demo, UCI, Olist
+   |
+Ingest          ingest.py: decoding, tolerant parsing, field mapping, derivations
+   |
+Contract        data_contracts.py: checks the raw values, names the rule each bad row breaks
+   |
+ETL             etl.py: sets rows aside, rule-based filling, line provenance, signed economics
+   |
+Warehouse       warehouse.py: SQLite fact and dimensions, v_ledger, v_sales, governance
+                backup.py: a copy before every import, with restore
+   |
+Analytics       metrics, pvm, diagnostics, forecasting, elasticity, churn, supply, basket
+   |
+Decisions       decision_lab, optimizer, experiments, action_center
+   |
+Delivery        pages (Streamlit), narrative, reporting, query_assistant, Power BI package
+```
 
-1. **Sources** — single-file transaction sources, a seven-table demonstration profile, and a public Olist adapter.
-2. **Contracts** — required fields, business key, types, ranges, enumerations and future-date controls.
-3. **ETL** — canonical mapping, deterministic cleaning, economic derivation, provenance labels and record-hash incremental loading.
-4. **Warehouse** — SQLite star schema, monthly KPI views, targets, inventory, experiment tables, metadata, contract results and ETL history.
-5. **Semantic and trust layer** — metric definition, owner, status, confidence, source note and lineage.
-6. **Analytics** — KPI reconciliation, RFM/CLV baseline, cohorts, root-cause bridges, forecasting, deterministic scenarios, Monte Carlo simulation and A/B analysis.
-7. **Action layer** — prioritised issues, evidence, recommended action, owner, due date and downloadable action register.
-8. **Delivery** — Streamlit application, Word/HTML/Markdown reports and a Power BI model/DAX package.
+## Key ideas
 
-## Key controls
+**One signed ledger.** `v_ledger` holds every valid line, with reversals negative. Money metrics and demand read it, so results after returns are automatic at any grain. `v_sales` holds positive sales only, for order counts.
 
-- Many-to-one joins use validation in the multi-table adapters.
-- Core financial arithmetic is deterministic and covered by reconciliation tests.
-- LLM output does not calculate core metrics or execute arbitrary write SQL.
-- Estimated and simulated values are visible in the UI and reports.
-- Fault injection runs in memory and cannot contaminate the production warehouse.
+**Nothing is thrown away.** A line that breaks the contract, or is postage or a fee rather than goods, stays in `fact_transactions` with its `reject_reason` and leaves every metric. Net revenue plus the value of those lines reconciles to the file.
+
+**Trust is computed from rows.** Provenance is stored per line. `metric_catalog` and `data_profiles` are rebuilt from the whole warehouse after every load, and never copied from the latest batch.
+
+**Display logic stays out of the analytics.** Analysis modules return data frames and numbers. `narrative.py` turns them into sentences and payloads, `viz.py` into charts, and `live.py` into animated instruments.
+
+## Interface modules
+
+| Module | Role |
+|---|---|
+| `design.py` | Colour tokens, Plotly template, global CSS |
+| `viz.py` | Chart builders that share one rulebook |
+| `live.py` | Money river, gauges, simulation drop and globe, hand-built on canvas and SVG |
+| `narrative.py` | Page ledes and component payloads |
+| `ui.py` | Page furniture, filters, trust sentences |
+
+Colour is semantic. Aqua is money in play, gold is profit kept, coral is money leaving. Series colours identify entities and were validated for colour-blind separation on both dark surfaces.
+
+The animated components use no external libraries, so the app works offline. They pause off screen and honour the reduced-motion setting. Every animated chart has a table view.
+
+## Controls
+
+- Joins in the multi-table adapters validate many-to-one cardinality.
+- Filter values reach SQL only as bound parameters, and dimension names come from allowlists.
+- Fault injection runs in memory and cannot touch the warehouse.
+- Read-only mode blocks action writes, imports, drills and server-side report files.
+- `INSIGHTFLOW_ACCESS_CODE` holds the app behind one shared code, compared in constant time. It is a door for a small team, not user accounts.
+- Data Hub copies the warehouse before every import and keeps the last three. A restore backs up what it replaces first.
+- The LLM summary is optional and never calculates a metric.
+- The warehouse records its schema version. Demo warehouses rebuild themselves after a definition change, and real ones ask for a re-import.

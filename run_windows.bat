@@ -19,6 +19,6 @@ if not exist "data\warehouse\insightflow.db" (
   echo [3/4] Existing warehouse detected.
 )
 
-echo [4/4] Starting InsightFlow Pro v0.4.3.3...
+echo [4/4] Starting InsightFlow...
 insightflow run
 endlocal

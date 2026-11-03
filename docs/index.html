@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>InsightFlow 2.0</title>
+<meta name="description" content="InsightFlow 是一个零售经营分析与决策平台：把交易数据变成一条看得见的资金流，并在做决定之前先模拟结果。已在 106 万行的真实账本上完整验证。">
+<style>
+@font-face {
+  font-family: "Sora";
+  src: url("assets/fonts/sora-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 800;
+  font-display: swap;
+}
+:root {
+  --page: #0A1F3D;
+  --panel: #0F2747;
+  --raised: #17345C;
+  --line: #274A78;
+  --ink: #EAF4FF;
+  --ink-soft: #B4C7DF;
+  --muted: #8BA3C2;
+  --flow: #38D6C4;
+  --profit: #FFC44D;
+  --leak: #FF7B6B;
+  --radius: 10px;
+}
+* { box-sizing: border-box; }
+html { background: var(--page); }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: Sora, "HarmonyOS Sans SC", MiSans, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--flow); text-underline-offset: 3px; }
+a:focus-visible { outline: 2px solid var(--flow); outline-offset: 3px; border-radius: 4px; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+header.hero { padding: 72px 0 40px; }
+.version { color: var(--muted); font-size: .92rem; margin: 0 0 14px; }
+h1 { font-size: clamp(2.3rem, 5vw, 3.6rem); line-height: 1.12; letter-spacing: -.02em; margin: 0 0 18px; }
+h1 span { color: var(--flow); }
+.lede { font-size: clamp(1.05rem, 1.6vw, 1.25rem); color: var(--ink-soft); max-width: 46em; margin: 0; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+.button {
+  display: inline-block; padding: 11px 18px; border-radius: var(--radius);
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  text-decoration: none; font-weight: 600;
+}
+.button.primary { background: var(--flow); border-color: var(--flow); color: #06213A; }
+.button:hover { border-color: var(--flow); }
+figure { margin: 0; }
+.shot {
+  border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--panel);
+  box-shadow: 0 24px 60px rgba(3, 12, 26, .55);
+}
+.shot img { display: block; width: 100%; height: auto; }
+figcaption { color: var(--muted); font-size: .9rem; margin-top: 10px; }
+section { padding: 56px 0 8px; }
+h2 { font-size: clamp(1.45rem, 2.6vw, 1.9rem); line-height: 1.3; margin: 0 0 10px; letter-spacing: -.01em; }
+.section-lede { color: var(--ink-soft); margin: 0 0 26px; max-width: 48em; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.stat { background: var(--panel); padding: 20px 20px 18px; }
+.stat b { display: block; font-size: clamp(1.5rem, 2.8vw, 2.1rem); line-height: 1.2; letter-spacing: -.02em; }
+.stat b.gold { color: var(--profit); }
+.stat b.aqua { color: var(--flow); }
+.stat span { display: block; color: var(--ink-soft); font-size: .92rem; margin-top: 6px; }
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 22px; }
+.card h3 { font-size: 1.05rem; margin: 0 0 6px; }
+.card p { margin: 0; color: var(--ink-soft); font-size: .95rem; }
+.card .where { display: block; color: var(--muted); font-size: .85rem; margin-top: 10px; }
+.gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.lessons { width: 100%; border-collapse: collapse; font-size: .95rem; }
+.lessons th, .lessons td { text-align: left; padding: 13px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.lessons th { color: var(--muted); font-weight: 600; font-size: .88rem; }
+.lessons td:first-child { color: var(--ink); width: 26%; }
+.lessons td.before { color: var(--leak); }
+.lessons td.after { color: var(--ink-soft); }
+.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+ul.plain { margin: 0; padding-left: 1.1em; color: var(--ink-soft); }
+ul.plain li { margin: 6px 0; }
+pre {
+  margin: 0; padding: 16px 18px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); overflow-x: auto; color: var(--ink); font-size: .92rem; line-height: 1.6;
+}
+footer { margin-top: 64px; padding: 28px 0 48px; border-top: 1px solid var(--line); color: var(--muted); font-size: .9rem; }
+footer p { margin: 4px 0; }
+@media (max-width: 900px) {
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cards, .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .wrap { padding: 0 16px; }
+  header.hero { padding-top: 48px; }
+  .cards, .gallery, .two { grid-template-columns: 1fr; }
+  .lessons td:first-child { width: auto; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <p class="version">版本 2.0.0，2026 年 11 月</p>
+    <h1>InsightFlow <span>2.0</span></h1>
+    <p class="lede">一个零售经营分析与决策平台。它把交易数据变成一条看得见的资金流，告诉你钱从哪里来、在哪里流失，并在你做决定之前先模拟结果。2.0 在 106 万行的真实公开账本上完整跑过，问题都修完了才发布。</p>
+    <div class="actions">
+      <a class="button primary" href="https://github.com/zhao-yushen/InsightFlow-Analytics">查看源代码</a>
+      <a class="button" href="https://github.com/zhao-yushen/InsightFlow-Analytics/blob/main/docs/validation.md">验证记录</a>
+      <a class="button" href="https://github.com/zhao-yushen/InsightFlow-Analytics/blob/main/docs/methodology.md">方法说明</a>
+      <a class="button" href="https://github.com/zhao-yushen/InsightFlow-Analytics/releases/tag/v2.0.0">发布说明</a>
+    </div>
+  </header>
+
+  <figure class="shot">
+    <img src="assets/overview.png" width="1600" height="1000" alt="经营总览：资金从商品毛额流出折扣、退款、商品成本、物流、支付、营销和退货处理，最后留下贡献利润">
+  </figure>
+  <figcaption>经营总览。点击任意一项流出，可以查看它来自哪些品类和市场。截图为可复现的模拟演示数据。</figcaption>
+
+  <section aria-labelledby="real">
+    <h2 id="real">在真实账本上验证过</h2>
+    <p class="section-lede">用公开的 UCI Online Retail II 数据集，在真实浏览器里上传、导入，再逐页检查。下面的数字都来自那次运行。</p>
+    <div class="stats">
+      <div class="stat"><b>1,067,371</b><span>行交易，两个年度工作表一起读入</span></div>
+      <div class="stat"><b class="gold">£0.00</b><span>对账差额：净销售额加隔离行金额，等于去重后的源文件</span></div>
+      <div class="stat"><b class="aqua">0.58%</b><span>问题行被隔离并可下载，文件照常导入</span></div>
+      <div class="stat"><b>&lt; 0.6 秒</b><span>导入后 17 个页面重复访问的耗时，全部无报错</span></div>
+      <div class="stat"><b>6.5%</b><span>收入预测滚动回测误差（WAPE），比沿用上月准 55%</span></div>
+      <div class="stat"><b>0.79</b><span>流失模型跨期 AUC，用旧数据训练、用之后 90 天打分</span></div>
+      <div class="stat"><b>132</b><span>个国家和地区可识别，包括 EIRE、RSA 这样的写法</span></div>
+      <div class="stat"><b>249</b><span>项自动化测试，覆盖率 93%，Python 3.11 和 3.13</span></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="answers">
+    <h2 id="answers">它能回答什么</h2>
+    <p class="section-lede">每个页面先用一句话说清发生了什么，再给出依据。每张图都可以切换成表格查看。</p>
+    <div class="cards">
+      <div class="card"><h3>钱去了哪里</h3><p>动态资金流和价格、销量、结构、成本桥接，各项相加等于实际变化，未解释差额为零。</p><span class="where">经营总览、利润与单位经济</span></div>
+      <div class="card"><h3>哪个市场在赚钱</h3><p>可拖动的地球仪，用鼠标或键盘选中市场，查看规模、利润率和退货。</p><span class="where">全球市场</span></div>
+      <div class="card"><h3>该不该调价</h3><p>用订单数据估计价格弹性，按销售渠道分别跟踪，每条调价建议都带利润区间。</p><span class="where">定价实验室</span></div>
+      <div class="card"><h3>方案值不值得做</h3><p>Monte Carlo 模拟数千种结果，并在同一批模拟未来上比较所有价格、折扣和营销组合。</p><span class="where">概率决策实验室</span></div>
+      <div class="card"><h3>谁可能不再回购</h3><p>流失模型通过跨期验证才启用，达不到标准时页面会说明，并改用可解释的规则分数。</p><span class="where">客户价值与流失</span></div>
+      <div class="card"><h3>这些数字可信吗</h3><p>逐行记录数据来源，指标可信度取决于最弱的输入。估算值会标明，不会被当成审计数字。</p><span class="where">数据与指标信任中心</span></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="gallery">
+    <h2 id="gallery">界面</h2>
+    <div class="gallery">
+      <figure>
+        <div class="shot"><img src="assets/markets.png" width="1600" height="1000" loading="lazy" alt="全球市场：地球仪上的气泡代表各市场净销售额，右侧是各区域排名"></div>
+        <figcaption>全球市场</figcaption>
+      </figure>
+      <figure>
+        <div class="shot"><img src="assets/pricing.png" width="1600" height="1000" loading="lazy" alt="定价实验室：各品类价格弹性的估计值、95% 区间和行业假设"></div>
+        <figcaption>定价实验室</figcaption>
+      </figure>
+      <figure>
+        <div class="shot"><img src="assets/decision-lab.png" width="1600" height="1000" loading="lazy" alt="概率决策实验室：利润变化的模拟分布，以及各因素对结果的影响"></div>
+        <figcaption>概率决策实验室</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section aria-labelledby="lessons">
+    <h2 id="lessons">真实数据暴露的问题</h2>
+    <p class="section-lede">演示数据是干净的，真实账本不是。下面这些问题，只有在真实数据上跑过才会出现，现在都有回归测试守住。</p>
+    <div class="table-scroll">
+      <table class="lessons">
+        <thead><tr><th scope="col">情形</th><th scope="col">之前</th><th scope="col">现在</th></tr></thead>
+        <tbody>
+          <tr><td>源文件没有折扣字段</td><td class="before">凭空扣了 3% 折扣，净销售额比源文件少 £56.6 万</td><td class="after">按成交价计，与源文件逐分对账</td></tr>
+          <tr><td>有几千行零价记录</td><td class="before">整个文件被拒绝导入</td><td class="after">问题行隔离、可下载，确认后照常导入</td></tr>
+          <tr><td>同一商品有两套价目表</td><td class="before">网店和批发价格混在一起，弹性被拉到 −0.16</td><td class="after">按销售渠道分别跟踪，得到 −0.96</td></tr>
+          <tr><td>邮费和平台手续费</td><td class="before">算作商品销售，亚马逊手续费被记成 £22 万退款</td><td class="after">作为非商品行单独列出</td></tr>
+          <tr><td>源文件没有库存</td><td class="before">编造库存量，并据此发出补货告警</td><td class="after">不编造数据，只分析需求</td></tr>
+          <tr><td>当天下单又取消的大单</td><td class="before">80,995 件被算成日需求 900</td><td class="after">需求按扣除退货后的净数计算</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="limits">
+    <h2 id="limits">方法与边界</h2>
+    <div class="two">
+      <div class="card">
+        <h3>做法</h3>
+        <ul class="plain">
+          <li>退货是反向记录，任何维度的汇总都已扣除退货。</li>
+          <li>价格弹性用泊松固定效应回归，误差按商品聚类，再向品类先验收缩。</li>
+          <li>预测在多个时序模型中滚动回测选优，未结束的月份不参与训练。</li>
+          <li>A/B 实验在区间跨过 0 时判为证据不足，不把噪声说成结论。</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>局限</h3>
+        <ul class="plain">
+          <li>价格不是随机实验，弹性估计在演示数据上偏向 0，涨价建议可能高估收益。</li>
+          <li>没有成本数据时，利润由规则估算，只能看方向。</li>
+          <li>默认经营目标由近三个月均值加规则增幅生成，并非已批准预算。</li>
+          <li>访问码只是一道共用的门，企业部署还需要账号体系和权限管理。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="start">
+    <h2 id="start">快速开始</h2>
+    <p class="section-lede">需要 Python 3.10 或更高版本。Windows 上也可以直接双击 <code>run_windows.bat</code>。首次打开会自动生成演示数据，约需 15 秒。</p>
+    <pre><code>git clone https://github.com/zhao-yushen/InsightFlow-Analytics.git
+cd InsightFlow-Analytics
+python -m venv .venv
+.venv\Scripts\activate
+pip install -e .
+insightflow run</code></pre>
+  </section>
+
+  <footer>
+    <p>独立设计与开发：Zhao Yushen。MIT License。</p>
+    <p>截图使用可复现的模拟数据，不代表任何企业的真实经营结果。真实数据的验证结果见验证记录。</p>
+  </footer>
+</div>
+</body>
+</html>

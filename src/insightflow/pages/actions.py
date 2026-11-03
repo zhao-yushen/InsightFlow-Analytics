@@ -10,8 +10,9 @@ from insightflow.action_center import (
     update_action_register,
 )
 from insightflow.config import DEFAULT_DB_PATH, is_read_only
-from insightflow.i18n import t
-from insightflow.ui import page_header, sidebar_filters
+from insightflow.i18n import current_language, t, tr
+from insightflow.live import gauge_strip
+from insightflow.ui import gauge_item, page_header, period_meta, sidebar_filters
 
 
 def _status_label(value: str) -> str:
@@ -19,32 +20,59 @@ def _status_label(value: str) -> str:
 
 
 def render() -> None:
-    page_header(
-        t("page.actions.title"),
-        t("page.actions.desc"),
-        eyebrow="ACTION MANAGEMENT",
-    )
     filters = sidebar_filters(DEFAULT_DB_PATH)
     read_only = is_read_only()
+    history = st.session_state.get("actions_history", False)
     actions = sync_action_register(
-        DEFAULT_DB_PATH, filters, persist=not read_only, include_inactive=True
+        DEFAULT_DB_PATH,
+        filters,
+        persist=not read_only,
+        include_inactive=history,
+        language=current_language(),
     )
     if actions.empty:
-        st.success(t("actions.none"))
+        page_header(t("page.actions.title"), t("actions.none"), meta=period_meta(filters))
         return
 
     active = actions.loc[actions.get("is_active", 1).astype(bool)]
-    cols = st.columns(4)
-    cols[0].metric(t("actions.current"), len(active))
-    cols[1].metric("P0/P1", int(active["severity"].isin(["P0", "P1"]).sum()))
-    cols[2].metric(
-        t("actions.in_progress"),
-        int(active["status"].isin(["Open", "In Progress", "Blocked"]).sum()),
+    urgent = int(active["severity"].isin(["P0", "P1"]).sum())
+    page_header(
+        t("page.actions.title"),
+        tr(
+            f"当前有 {len(active)} 项待处理，其中 {urgent} 项优先级最高。分配负责人和截止日后保存。",
+            f"{len(active)} actions are open and {urgent} are top priority. Assign an owner and "
+            "a due date, then save.",
+        ),
+        meta=period_meta(filters),
     )
-    cols[3].metric(t("actions.completed"), int((actions["status"] == "Done").sum()))
+    gauge_strip(
+        [
+            gauge_item(t("actions.current"), len(active), "count", str(len(active)), note_text=""),
+            gauge_item("P0/P1", urgent, "count", str(urgent), note_text=""),
+            gauge_item(
+                t("actions.in_progress"),
+                int(active["status"].isin(["Open", "In Progress", "Blocked"]).sum()),
+                "count",
+                str(int(active["status"].isin(["Open", "In Progress", "Blocked"]).sum())),
+                note_text="",
+            ),
+            gauge_item(
+                t("actions.completed"),
+                int((actions["status"] == "Done").sum()),
+                "count",
+                str(int((actions["status"] == "Done").sum())),
+                note_text="",
+            ),
+        ],
+        key="action_gauges",
+    )
 
     if read_only:
         st.info(t("actions.read_only"))
+    st.toggle(
+        tr("显示已不再触发的历史提示", "Show alerts that no longer fire"),
+        key="actions_history",
+    )
 
     left, right = st.columns(2)
     with left:
@@ -94,7 +122,6 @@ def render() -> None:
         )
     edited = st.data_editor(
         editor_frame,
-        use_container_width=True,
         hide_index=True,
         disabled=True
         if read_only

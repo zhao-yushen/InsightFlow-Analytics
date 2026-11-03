@@ -10,9 +10,9 @@ STATUS_LABELS = {
     "Verified": "真实/已核验",
     "Estimated": "估算",
     "Simulated": "模拟",
+    "Missing": "未提供",
     "Mixed": "混合",
 }
-STATUS_ICONS = {"Verified": "✅", "Estimated": "🧮", "Simulated": "🧪", "Mixed": "🔀"}
 
 
 def dataset_profile(db_path: str | Path) -> dict[str, str | float]:
@@ -23,7 +23,7 @@ def dataset_profile(db_path: str | Path) -> dict[str, str | float]:
             "data_mode": "Mixed",
             "transaction_status": "Verified",
             "economic_status": "Estimated",
-            "inventory_status": "Simulated",
+            "inventory_status": "Missing",
             "source_note": "旧仓库未记录完整来源标签",
         }
     frame = query_df(db_path, "SELECT * FROM data_profiles ORDER BY created_at DESC LIMIT 1")
@@ -44,7 +44,7 @@ def metric_trust(db_path: str | Path, metric_id: str) -> dict[str, str | float]:
 
 
 def trust_label(status: str) -> str:
-    return f"{STATUS_ICONS.get(status, 'ℹ️')} {STATUS_LABELS.get(status, status)}"
+    return STATUS_LABELS.get(status, status)
 
 
 def metric_trust_table(db_path: str | Path) -> pd.DataFrame:
