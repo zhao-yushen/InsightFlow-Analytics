@@ -190,8 +190,8 @@ def _optimizer_tab(filters, code: str) -> None:
     prefix = symbol(code)
     note(
         tr(
-            "一次评估 245 个价格、折扣和营销组合。所有方案面对同一批模拟未来，差异只来自方案本身。",
-            "245 combinations of price, discount and marketing, all facing the same simulated "
+            "一次评估价格、折扣和营销的所有组合。所有方案面对同一批模拟未来，差异只来自方案本身。",
+            "Every combination of price, discount and marketing, all facing the same simulated "
             "futures, so differences come from the plan alone.",
         )
     )

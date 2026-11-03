@@ -17,7 +17,7 @@ USER_ICON = ":material/person:"
 ASSISTANT_ICON = ":material/water_drop:"
 COLUMN_LABELS = {
     "driver": ("驱动因素", "Driver"),
-    "previous": ("上期", "Previous"),
+    "previous": ("基准期", "Base period"),
     "current": ("本期", "Current"),
     "change": ("变化", "Change"),
     "revenue_contribution": ("收入贡献", "Revenue effect"),
@@ -36,7 +36,7 @@ COLUMN_LABELS = {
     "contribution_profit": ("贡献利润", "Contribution profit"),
     "contribution_margin": ("贡献利润率", "Contribution margin"),
     "current_revenue": ("本期净销售额", "Current revenue"),
-    "previous_revenue": ("上期净销售额", "Previous revenue"),
+    "previous_revenue": ("基准期净销售额", "Base-period revenue"),
     "profit_change": ("利润变化", "Profit change"),
     "change_rate": ("变化率", "Change rate"),
     "month": ("月份", "Month"),

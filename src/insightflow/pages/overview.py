@@ -8,17 +8,26 @@ from insightflow.currency import money, symbol
 from insightflow.design import COLORS
 from insightflow.diagnostics import generate_diagnostics
 from insightflow.forecasting import forecast_metric
-from insightflow.i18n import current_language, t, tr
+from insightflow.i18n import base_period, current_language, t, tr
 from insightflow.live import gauge_strip, money_river
 from insightflow.metrics import (
+    FilterSpec,
     filter_coverage,
     kpi_summary,
+    leak_drivers,
     monthly_trend,
+    partial_month,
     previous_period,
     quality_score,
     target_status,
 )
-from insightflow.narrative import overview_story, river_payload, river_table, target_table
+from insightflow.narrative import (
+    LEAK_LABELS,
+    overview_story,
+    river_payload,
+    river_table,
+    target_table,
+)
 from insightflow.pvm import price_volume_mix
 from insightflow.ui import (
     currency_code,
@@ -33,6 +42,50 @@ from insightflow.ui import (
     table_view,
 )
 from insightflow.viz import forecast_fan, show, trend_lines
+
+
+def _leak_detail(filters: FilterSpec, leak: str, code: str) -> None:
+    """Show which categories and markets drive the outflow picked on the river."""
+    chinese, english = next((zh, en) for key, zh, en in LEAK_LABELS if key == leak)
+    heading, close = st.columns([5, 1])
+    with heading:
+        subhead(tr(f"{chinese}来自哪里", f"Where {english.lower()} comes from"))
+    with close:
+        if st.button(tr("收起", "Close"), key="close_leak_detail", width="stretch"):
+            st.session_state.pop("overview_leak", None)
+            st.rerun()
+    item = tr("名称", "Name")
+    amount = tr(f"金额（{code}）", f"Amount ({code})")
+    share = tr("占这一项", "Share of this outflow")
+    rate = tr("占销售额", "Rate on sales")
+    shift = tr(f"比率较{base_period()}", f"Rate on {base_period()}")
+    columns = st.columns(2, gap="large")
+    for column, dimension, title in (
+        (columns[0], "category", tr("按品类", "By category")),
+        (columns[1], "country", tr("按市场", "By market")),
+    ):
+        with column:
+            subhead(title)
+            frame = leak_drivers(DEFAULT_DB_PATH, filters, leak, dimension).rename(
+                columns={
+                    "item": item,
+                    "amount": amount,
+                    "share": share,
+                    "rate": rate,
+                    "rate_change": shift,
+                }
+            )
+            frame[shift] = frame[shift] * 100
+            st.dataframe(
+                frame[[item, amount, share, rate, shift]],
+                hide_index=True,
+                column_config={
+                    amount: st.column_config.NumberColumn(format="%,.0f"),
+                    share: st.column_config.NumberColumn(format="percent"),
+                    rate: st.column_config.NumberColumn(format="percent"),
+                    shift: st.column_config.NumberColumn(format="%+.1f pts"),
+                },
+            )
 
 
 def render() -> None:
@@ -67,9 +120,28 @@ def render() -> None:
         meta=period_meta(filters),
     )
 
-    money_river(
-        river_payload(current_kpi, previous_kpi, code, comparable=comparable), key="overview_river"
+    picked = money_river(
+        river_payload(
+            current_kpi,
+            previous_kpi,
+            code,
+            comparable=comparable,
+            picked=st.session_state.get("overview_leak"),
+        ),
+        key="overview_river",
     )
+    if picked:
+        st.session_state["overview_leak"] = picked
+    leak = st.session_state.get("overview_leak")
+    if leak:
+        _leak_detail(filters, leak, code)
+    else:
+        note(
+            tr(
+                "点击任意一项流出，查看它来自哪些品类和市场。",
+                "Click an outflow to see which categories and markets drive it.",
+            )
+        )
     table_view(river_table(current_kpi, code), tr("查看资金流明细", "View the money flow as a table"))
 
     trend = monthly_trend(DEFAULT_DB_PATH, filters.undated())
@@ -114,8 +186,8 @@ def render() -> None:
     if not comparable:
         note(
             tr(
-                "当前或上一周期的订单少于 5 笔，因此暂停百分比变化，避免小样本误导。",
-                "Fewer than five orders in this or the prior period, so changes are paused.",
+                f"本期或{base_period()}的订单少于 5 笔，因此暂停百分比变化，避免小样本误导。",
+                f"Fewer than five orders in this period or {base_period()}, so changes are paused.",
             )
         )
 
@@ -124,6 +196,7 @@ def render() -> None:
         tr("月度数据不受日期筛选影响", "Monthly history ignores the date filter"),
     )
     left, right = st.columns([1.72, 1], gap="large")
+    unfinished = partial_month(DEFAULT_DB_PATH)
     with left:
         with st.container(key="unroll_overview_trend"):
             show(
@@ -137,8 +210,16 @@ def render() -> None:
                     },
                     money_prefix=prefix,
                     height=360,
+                    unfinished=unfinished,
                 ),
                 key="overview_trend",
+            )
+        if unfinished:
+            note(
+                tr(
+                    f"{unfinished} 的数据还没到月底，虚线段是天数不足，不代表下跌。",
+                    f"{unfinished} is not over yet, so the dotted segment is missing days, not a fall.",
+                )
             )
     with right:
         subhead(tr("本期值得处理的问题", "What needs attention"))
@@ -195,6 +276,13 @@ def render() -> None:
         month = str(pd.Timestamp(filters.end_date).to_period("M"))
         subhead(tr(f"{month} 目标", f"{month} targets"))
         targets = target_status(DEFAULT_DB_PATH, month)
+        if month == unfinished:
+            note(
+                tr(
+                    "这个月还没结束，金额目标已按已过天数折算。",
+                    "This month is still running, so amount targets are prorated by days elapsed.",
+                )
+            )
         if targets.empty:
             note(tr("这个月没有目标记录。", "No targets recorded for this month."))
         else:

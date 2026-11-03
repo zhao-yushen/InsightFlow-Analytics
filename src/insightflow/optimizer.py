@@ -53,9 +53,11 @@ def search_plans(
     base_elasticity = _scenario_elasticity(db_path, filters, ScenarioInputs())
     draws = uncertainty_draws(base_elasticity, uncertainty)
 
+    # Discount cuts deeper than the discount actually running are not real options.
+    discounts = [step for step in space.discount_steps if baseline["discount_rate"] * 100 + step >= 0]
     rows: list[dict] = []
     for price, discount, marketing in product(
-        space.price_steps, space.discount_steps, space.marketing_steps
+        space.price_steps, discounts, space.marketing_steps
     ):
         plan = ScenarioInputs(
             name=f"{price:+.0f}% / {discount:+.0f}pp / {marketing:+.0f}%",

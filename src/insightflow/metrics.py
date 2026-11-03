@@ -19,10 +19,11 @@ class FilterSpec:
     categories: tuple[str, ...] = ()
     channels: tuple[str, ...] = ()
     regions: tuple[str, ...] = ()
+    compare: str = "previous"
 
     def undated(self) -> FilterSpec:
         """Keep the business scope but open the time window, for history-based models."""
-        return replace(self, start_date=None, end_date=None)
+        return replace(self, start_date=None, end_date=None, compare="previous")
 
 
 def filter_clause(filters: FilterSpec, alias: str = "") -> tuple[str, list]:
@@ -51,21 +52,21 @@ def filter_clause(filters: FilterSpec, alias: str = "") -> tuple[str, list]:
 def available_filters(db_path: str | Path) -> dict[str, list[str]]:
     return {
         "regions": query_df(
-            db_path, "SELECT DISTINCT market_region FROM fact_transactions ORDER BY 1"
+            db_path, "SELECT DISTINCT market_region FROM v_ledger ORDER BY 1"
         )["market_region"]
         .dropna()
         .tolist(),
-        "countries": query_df(db_path, "SELECT DISTINCT country FROM fact_transactions ORDER BY 1")[
+        "countries": query_df(db_path, "SELECT DISTINCT country FROM v_ledger ORDER BY 1")[
             "country"
         ]
         .dropna()
         .tolist(),
-        "categories": query_df(
-            db_path, "SELECT DISTINCT category FROM fact_transactions ORDER BY 1"
-        )["category"]
+        "categories": query_df(db_path, "SELECT DISTINCT category FROM v_ledger ORDER BY 1")[
+            "category"
+        ]
         .dropna()
         .tolist(),
-        "channels": query_df(db_path, "SELECT DISTINCT channel FROM fact_transactions ORDER BY 1")[
+        "channels": query_df(db_path, "SELECT DISTINCT channel FROM v_ledger ORDER BY 1")[
             "channel"
         ]
         .dropna()
@@ -75,10 +76,10 @@ def available_filters(db_path: str | Path) -> dict[str, list[str]]:
 
 def filter_option_counts(db_path: str | Path) -> dict[str, dict[str, int]]:
     queries = {
-        "regions": "SELECT market_region AS value, COUNT(*) AS rows FROM fact_transactions WHERE market_region IS NOT NULL GROUP BY market_region ORDER BY rows DESC, value",
-        "countries": "SELECT country AS value, COUNT(*) AS rows FROM fact_transactions WHERE country IS NOT NULL GROUP BY country ORDER BY rows DESC, value",
-        "categories": "SELECT category AS value, COUNT(*) AS rows FROM fact_transactions WHERE category IS NOT NULL GROUP BY category ORDER BY rows DESC, value",
-        "channels": "SELECT channel AS value, COUNT(*) AS rows FROM fact_transactions WHERE channel IS NOT NULL GROUP BY channel ORDER BY rows DESC, value",
+        "regions": "SELECT market_region AS value, COUNT(*) AS rows FROM v_ledger WHERE market_region IS NOT NULL GROUP BY market_region ORDER BY rows DESC, value",
+        "countries": "SELECT country AS value, COUNT(*) AS rows FROM v_ledger WHERE country IS NOT NULL GROUP BY country ORDER BY rows DESC, value",
+        "categories": "SELECT category AS value, COUNT(*) AS rows FROM v_ledger WHERE category IS NOT NULL GROUP BY category ORDER BY rows DESC, value",
+        "channels": "SELECT channel AS value, COUNT(*) AS rows FROM v_ledger WHERE channel IS NOT NULL GROUP BY channel ORDER BY rows DESC, value",
     }
     output: dict[str, dict[str, int]] = {}
     for key, sql in queries.items():
@@ -155,10 +156,34 @@ def filter_coverage(db_path: str | Path, filters: FilterSpec) -> dict[str, objec
     }
 
 
+def customer_coverage(db_path: str | Path, filters: FilterSpec) -> float:
+    """Share of net revenue that can be tied to a known customer."""
+    where, params = filter_clause(filters)
+    row = query_df(
+        db_path,
+        f"""
+        SELECT SUM(CASE WHEN customer_id IS NOT NULL THEN net_revenue END) AS known,
+               SUM(net_revenue) AS total
+        FROM v_ledger WHERE {where}
+        """,
+        params,
+    ).iloc[0]
+    total = float(row["total"] or 0)
+    return float(row["known"] or 0) / total if total else 0.0
+
+
+def partial_month(db_path: str | Path) -> str | None:
+    """Name the final month when the ledger stops before it ends, which reads as a collapse."""
+    last = query_df(db_path, "SELECT MAX(date) FROM v_sales").iloc[0, 0]
+    if last is None:
+        return None
+    stamp = pd.Timestamp(last)
+    return stamp.strftime("%Y-%m") if stamp.days_in_month - stamp.day >= 3 else None
+
+
 def date_bounds(db_path: str | Path) -> tuple[str, str]:
-    df = query_df(
-        db_path, "SELECT MIN(date) AS min_date, MAX(date) AS max_date FROM fact_transactions"
-    )
+    """Dates of usable lines. A rejected row dated 2099 must not stretch the default window."""
+    df = query_df(db_path, "SELECT MIN(date) AS min_date, MAX(date) AS max_date FROM v_ledger")
     return str(df.loc[0, "min_date"]), str(df.loc[0, "max_date"])
 
 
@@ -300,15 +325,67 @@ def weekday_pattern(db_path: str | Path, filters: FilterSpec) -> pd.DataFrame:
     return grid.reindex(columns=[1, 2, 3, 4, 5, 6, 0], fill_value=0.0).sort_index()
 
 
+def product_names(db_path: str | Path) -> pd.Series:
+    """Each product's canonical name: the one it most often sold under."""
+    names = query_df(db_path, "SELECT stock_code, description FROM dim_product")
+    return names.set_index("stock_code")["description"]
+
+
+# Each outflow on the money river, as a per-line amount.
+LEAK_AMOUNTS = {
+    "discount_amount": "CASE WHEN sale_valid=1 THEN discount_amount ELSE 0 END",
+    "returns_value": "CASE WHEN is_cancellation=1 THEN -net_revenue ELSE 0 END",
+    "cogs": "cogs",
+    "shipping_cost": "shipping_cost",
+    "payment_fee": "payment_fee",
+    "marketing_cost": "marketing_cost",
+    "return_processing_cost": "return_processing_cost",
+}
+
+
+def leak_drivers(
+    db_path: str | Path, filters: FilterSpec, leak: str, dimension: str, limit: int = 8
+) -> pd.DataFrame:
+    """Show who drives one outflow: amount, its rate on sales, and the move on the base period."""
+    if leak not in LEAK_AMOUNTS:
+        raise ValueError(f"未知的资金流出项: {leak}")
+    if dimension not in {"category", "country", "channel"}:
+        raise ValueError(f"不允许的维度: {dimension}")
+
+    def period(scope: FilterSpec) -> pd.DataFrame:
+        where, params = filter_clause(scope)
+        return query_df(
+            db_path,
+            f"""
+            SELECT {dimension} AS item,
+                   SUM({LEAK_AMOUNTS[leak]}) AS amount,
+                   SUM(CASE WHEN sale_valid=1 THEN gross_revenue ELSE 0 END) AS gross
+            FROM v_ledger WHERE {where}
+            GROUP BY {dimension}
+            """,
+            params,
+        ).set_index("item")
+
+    now = period(filters)
+    before = period(previous_period(filters))
+    table = now.join(before, how="left", rsuffix="_before").fillna(0.0)
+    table["rate"] = table["amount"] / table["gross"].replace(0, np.nan)
+    rate_before = table["amount_before"] / table["gross_before"].replace(0, np.nan)
+    table["rate_change"] = table["rate"] - rate_before
+    table["change"] = table["amount"] - table["amount_before"]
+    table["share"] = table["amount"] / max(float(table["amount"].sum()), 1.0)
+    ranked = table.sort_values("amount", ascending=False).head(limit)
+    return ranked.reset_index()[["item", "amount", "share", "rate", "rate_change", "change"]]
+
+
 def product_profitability(
     db_path: str | Path, filters: FilterSpec, limit: int = 100
 ) -> pd.DataFrame:
     where, params = filter_clause(filters)
-    return query_df(
+    table = query_df(
         db_path,
         f"""
         SELECT stock_code,
-               MAX(description) AS description,
                MAX(category) AS category,
                COALESCE(SUM(net_revenue), 0) AS revenue,
                COALESCE(SUM(gross_profit), 0) AS gross_profit,
@@ -328,6 +405,9 @@ def product_profitability(
         """,
         [*params, limit],
     )
+    names = table["stock_code"].map(product_names(db_path))
+    table.insert(1, "description", names.fillna(table["stock_code"]))
+    return table
 
 
 def cost_waterfall(db_path: str | Path, filters: FilterSpec) -> pd.DataFrame:
@@ -512,6 +592,36 @@ def quality_summary(db_path: str | Path) -> pd.DataFrame:
     return query_df(db_path, "SELECT * FROM data_quality_summary")
 
 
+def rejection_summary(db_path: str | Path) -> pd.DataFrame:
+    """Lines held back from analysis, by reason, with what they were worth."""
+    return query_df(
+        db_path,
+        """
+        SELECT reject_reason AS reason, COUNT(*) AS rows,
+               COALESCE(SUM(quantity * unit_price), 0) AS amount
+        FROM fact_transactions
+        WHERE reject_reason IS NOT NULL
+        GROUP BY reject_reason
+        ORDER BY rows DESC
+        """,
+    )
+
+
+def rejected_rows(db_path: str | Path, limit: int = 100_000) -> pd.DataFrame:
+    return query_df(
+        db_path,
+        """
+        SELECT reject_reason, invoice_no, stock_code, description, quantity, invoice_date,
+               unit_price, customer_id, country, channel
+        FROM fact_transactions
+        WHERE reject_reason IS NOT NULL
+        ORDER BY reject_reason, invoice_date
+        LIMIT ?
+        """,
+        (limit,),
+    )
+
+
 def quality_dimensions(db_path: str | Path) -> pd.DataFrame:
     return query_df(db_path, "SELECT * FROM data_quality_dimensions")
 
@@ -544,6 +654,11 @@ def target_status(db_path: str | Path, month: str | None = None) -> pd.DataFrame
         "cancellation_rate": float(row["cancellation_rate"] or 0),
     }
     out = targets.copy()
+    if month == partial_month(db_path):
+        # A month still running is judged against the part of its target already due.
+        last = pd.Timestamp(query_df(db_path, "SELECT MAX(date) FROM v_sales").iloc[0, 0])
+        additive = out["metric_id"].isin(["net_revenue", "contribution_profit"])
+        out.loc[additive, "target_value"] *= last.day / last.days_in_month
     out["actual_value"] = out["metric_id"].map(actual_map)
     out["attainment"] = np.where(
         out["direction"].eq("higher"),
@@ -559,20 +674,21 @@ def target_status(db_path: str | Path, month: str | None = None) -> pd.DataFrame
 
 
 def previous_period(filters: FilterSpec) -> FilterSpec:
+    """The window a period is judged against: the one before it, or the same dates a year ago."""
     if not filters.start_date or not filters.end_date:
         raise ValueError("比较期间需要开始和结束日期")
     start = pd.Timestamp(filters.start_date)
     end = pd.Timestamp(filters.end_date)
-    days = (end - start).days + 1
-    prev_end = start - pd.Timedelta(days=1)
-    prev_start = prev_end - pd.Timedelta(days=days - 1)
-    return FilterSpec(
+    if filters.compare == "year":
+        prev_start = start - pd.DateOffset(years=1)
+        prev_end = end - pd.DateOffset(years=1)
+    else:
+        prev_end = start - pd.Timedelta(days=1)
+        prev_start = prev_end - pd.Timedelta(days=(end - start).days)
+    return replace(
+        filters,
         start_date=prev_start.date().isoformat(),
         end_date=prev_end.date().isoformat(),
-        countries=filters.countries,
-        categories=filters.categories,
-        channels=filters.channels,
-        regions=filters.regions,
     )
 
 

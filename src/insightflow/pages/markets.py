@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pandas as pd
 import streamlit as st
 
@@ -46,13 +48,7 @@ def _story(markets: pd.DataFrame, labels: pd.Series, code: str) -> str:
 
 
 def _market_detail(filters: FilterSpec, country: str, label: str, code: str) -> None:
-    scoped = FilterSpec(
-        filters.start_date,
-        filters.end_date,
-        countries=(country,),
-        categories=filters.categories,
-        channels=filters.channels,
-    )
+    scoped = replace(filters, countries=(country,), regions=())
     current = kpi_summary(DEFAULT_DB_PATH, scoped)
     previous = kpi_summary(DEFAULT_DB_PATH, previous_period(scoped))
     subhead(label)
@@ -122,11 +118,24 @@ def render() -> None:
             st.session_state[SELECTED] = clicked
         note(
             tr(
-                "气泡大小代表净销售额，青色高于整体利润率，珊瑚色低于整体。拖动旋转，点击市场查看详情。",
+                "气泡大小代表净销售额，青色高于整体利润率，珊瑚色低于整体。拖动旋转，点击市场查看详情。"
+                "用键盘时，上下方向键切换市场，回车查看详情。",
                 "Bubble size is net revenue. Aqua earns above the overall margin, coral below. "
-                "Drag to rotate; click a market for detail.",
+                "Drag to rotate; click a market for detail. On a keyboard, the up and down arrows "
+                "move between markets and Enter opens one.",
             )
         )
+        unplaced = markets[markets["lat"].isna()]
+        if not unplaced.empty:
+            names = "、".join(labels[name] for name in unplaced["country"])
+            share = float(unplaced["revenue_share"].sum())
+            note(
+                tr(
+                    f"{names}没有地理位置，未显示在地球仪上，占净销售额 {share:.1%}。",
+                    f"{', '.join(labels[name] for name in unplaced['country'])} has no location and "
+                    f"is left off the globe, {share:.1%} of net revenue.",
+                )
+            )
     with right:
         selected = st.session_state.get(SELECTED)
         if selected in set(markets["country"]):

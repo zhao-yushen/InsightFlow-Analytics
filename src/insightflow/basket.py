@@ -7,10 +7,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .metrics import FilterSpec, filter_clause
+from .metrics import FilterSpec, filter_clause, product_names
 from .warehouse import query_df
 
 MAX_ITEMS = 200
+MAX_ORDERS = 120_000
 
 
 def association_rules(
@@ -27,11 +28,7 @@ def association_rules(
     where, params = filter_clause(filters)
     lines = query_df(
         db_path,
-        f"""
-        SELECT DISTINCT invoice_no, {level} AS item, MAX(description) OVER (PARTITION BY {level}) AS name
-        FROM v_sales
-        WHERE {where}
-        """,
+        f"SELECT DISTINCT invoice_no, {level} AS item FROM v_sales WHERE {where}",
         params,
     )
     columns = [
@@ -47,6 +44,11 @@ def association_rules(
     if lines.empty:
         return pd.DataFrame(columns=columns)
 
+    orders_seen = lines["invoice_no"].unique()
+    if len(orders_seen) > MAX_ORDERS:
+        # A stable sample keeps the matrix small; lift barely moves at this size.
+        kept = np.random.default_rng(0).choice(orders_seen, size=MAX_ORDERS, replace=False)
+        lines = lines[lines["invoice_no"].isin(kept)]
     baskets = lines["invoice_no"].astype("category")
     popular = lines["item"].value_counts().head(MAX_ITEMS).index
     subset = lines[lines["item"].isin(popular)]
@@ -59,7 +61,7 @@ def association_rules(
     counts = matrix.T @ matrix
     item_orders = np.diag(counts).copy()
     np.fill_diagonal(counts, 0)
-    names = lines.drop_duplicates("item").set_index("item")["name"]
+    names = product_names(db_path) if level == "stock_code" else {}
 
     rows: list[dict] = []
     left_index, right_index = np.where(counts >= min_pair_orders)

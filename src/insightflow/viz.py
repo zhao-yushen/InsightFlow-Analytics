@@ -45,19 +45,34 @@ def trend_lines(
     height: int = 340,
     money_prefix: str = "",
     percent: bool = False,
+    unfinished: str | None = None,
 ) -> go.Figure:
-    """Lines over time. `series` maps a column to its label and colour."""
+    """Lines over time. `series` maps a column to its label and colour.
+
+    A period named by `unfinished` is still running, so its segment is dashed: the drop
+    into it is missing days, not a fall in the business.
+    """
     figure = go.Figure()
     hover = ".1%" if percent else ",.0f"
+    settled = frame.iloc[:-1] if len(frame) > 1 and frame[x].iloc[-1] == unfinished else frame
     for column, (label, color) in series.items():
         figure.add_scatter(
-            x=frame[x],
-            y=frame[column],
+            x=settled[x],
+            y=settled[column],
             name=label,
             mode="lines",
             line={"color": color, "width": 2, "shape": "spline", "smoothing": 0.5},
             hovertemplate=f"{label} {money_prefix}%{{y:{hover}}}<extra></extra>",
         )
+        if len(settled) < len(frame):
+            figure.add_scatter(
+                x=frame[x].tail(2),
+                y=frame[column].tail(2),
+                mode="lines",
+                line={"color": color, "width": 2, "dash": "dot"},
+                showlegend=False,
+                hovertemplate=f"{label} {money_prefix}%{{y:{hover}}}<extra></extra>",
+            )
         figure.add_scatter(
             x=frame[x].tail(1),
             y=frame[column].tail(1),

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 from insightflow.config import DEFAULT_DB_PATH
@@ -21,6 +22,53 @@ from insightflow.ui import (
 from insightflow.viz import heatmap, ranked_bars, show
 
 
+def _demand_view(policy: pd.DataFrame) -> None:
+    """Without stock levels the ledger still shows what sells and how steadily."""
+    active = policy[policy["daily_demand"] > 0]
+    page_header(
+        t("page.inventory.title"),
+        tr(
+            "这份数据没有库存字段，所以这里只分析需求，不判断缺货。导入时映射库存字段后会显示补货清单。",
+            "This data has no stock levels, so this page reads demand and makes no stockout "
+            "calls. Map a stock field on import to get an order list.",
+        ),
+        meta=trust_sentence(DEFAULT_DB_PATH),
+    )
+    gauge_strip(
+        [
+            gauge_item(tr("近 90 天有需求的商品", "Products with demand"), len(active), "count", f"{len(active):,}", note_text=tr("净需求大于零", "Net demand above zero")),
+            gauge_item(tr("A 类商品", "A items"), int((active["abc_class"] == "A").sum()), "count", f"{int((active['abc_class'] == 'A').sum()):,}", note_text=tr("贡献 80% 收入", "Bring 80% of revenue")),
+            gauge_item(tr("需求稳定", "Steady demand"), int((active["xyz_class"] == "X").sum()), "count", f"{int((active['xyz_class'] == 'X').sum()):,}", note_text=tr("X 类", "X class")),
+            gauge_item(tr("需求波动大", "Erratic demand"), int((active["xyz_class"] == "Z").sum()), "count", f"{int((active['xyz_class'] == 'Z').sum()):,}", note_text=tr("Z 类", "Z class")),
+        ],
+        key="inventory_demand_gauges",
+    )
+    section_header(tr("需求结构", "Demand structure"), tr("根据近 90 天净需求计算，已扣除退货", "Last 90 days of net demand, after returns"))
+    left, right = st.columns([1, 1.25], gap="large")
+    with left:
+        subhead(tr("收入分布（ABC-XYZ）", "Revenue by class (ABC-XYZ)"))
+        show(
+            heatmap(
+                policy_matrix(policy),
+                x_label=tr("需求稳定性：X 稳定，Z 波动", "Demand: X steady, Z erratic"),
+                y_label=tr("价值：A 最高", "Value: A highest"),
+                percent=False,
+                height=320,
+            ),
+            key="inventory_matrix",
+        )
+    with right:
+        subhead(tr("日均需求最高的商品", "Highest daily demand"))
+        show(
+            ranked_bars(
+                policy.sort_values("daily_demand", ascending=False).head(10),
+                label="description",
+                value="daily_demand",
+            ),
+            key="inventory_top_demand",
+        )
+
+
 def render() -> None:
     sidebar_filters(DEFAULT_DB_PATH)
     code = currency_code()
@@ -28,6 +76,9 @@ def render() -> None:
     kpi = inventory_kpis(DEFAULT_DB_PATH)
     service = st.session_state.get("inventory_service", 95)
     policy = inventory_policy(DEFAULT_DB_PATH, service_level=service / 100)
+    if not policy.empty and policy["inventory_on_hand"].isna().all():
+        _demand_view(policy)
+        return
     risk = float(policy["margin_at_risk"].sum()) if not policy.empty else 0.0
     urgent = policy[policy["recommended_order"] > 0]
     page_header(

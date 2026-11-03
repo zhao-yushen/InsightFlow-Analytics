@@ -10,7 +10,7 @@ from .config import is_read_only
 from .currency import money, warehouse_currency
 from .diagnostics import TARGET_LABELS, _chooser, generate_diagnostics
 from .metrics import FilterSpec, inventory_status, target_status
-from .warehouse import connect, query_df
+from .warehouse import connect, query_df, table_exists
 
 ACTION_STATUSES = ("Open", "In Progress", "Blocked", "Done", "Dismissed")
 EDITABLE_ACTION_COLUMNS = ("owner", "due_date", "status", "resolution_note")
@@ -34,6 +34,9 @@ def _fingerprint(*parts: object) -> str:
 
 
 def ensure_action_table(db_path: str | Path) -> None:
+    # Opening a write connection touches the file, and with it every cache's version key.
+    if table_exists(db_path, "action_register"):
+        return
     with connect(db_path) as conn:
         conn.execute(
             """
@@ -173,6 +176,27 @@ def _detected_actions(
     return pd.DataFrame(rows)
 
 
+_COMPARED_FIELDS = ("severity", "issue", "evidence", "recommended_action", "source")
+
+
+def _needs_write(stored: pd.DataFrame, detected: pd.DataFrame, today: str) -> bool:
+    """Write only news. A write changes the warehouse version and so empties every cache."""
+    active = stored[stored["is_active"] == 1] if not stored.empty else stored
+    found = set(detected["issue_fingerprint"]) if not detected.empty else set()
+    if set(active["issue_fingerprint"]) != found:
+        return True
+    current = active.set_index("issue_fingerprint")
+    for row in detected.to_dict("records"):
+        held = current.loc[row["issue_fingerprint"]]
+        if any(str(held[field]) != str(row[field]) for field in _COMPARED_FIELDS):
+            return True
+        if abs(float(held["confidence"]) - float(row["confidence"])) > 1e-9:
+            return True
+        if str(held["last_seen_at"])[:10] != today:
+            return True
+    return False
+
+
 def sync_action_register(
     db_path: str | Path,
     filters: FilterSpec,
@@ -192,6 +216,10 @@ def sync_action_register(
 
     ensure_action_table(db_path)
     now = datetime.now(timezone.utc).isoformat()
+    where = "" if include_inactive else "WHERE is_active=1 OR status IN ('In Progress','Blocked')"
+    stored = query_df(db_path, "SELECT * FROM action_register")
+    if not _needs_write(stored, detected, now[:10]):
+        return _sort_actions(query_df(db_path, f"SELECT * FROM action_register {where}"))
     with connect(db_path) as conn:
         conn.execute("UPDATE action_register SET is_active=0")
         for row in detected.to_dict("records"):
@@ -244,7 +272,6 @@ def sync_action_register(
                         row["resolution_note"],
                     ),
                 )
-    where = "" if include_inactive else "WHERE is_active=1 OR status IN ('In Progress','Blocked')"
     return _sort_actions(query_df(db_path, f"SELECT * FROM action_register {where}"))
 
 

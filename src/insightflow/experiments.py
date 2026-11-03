@@ -4,6 +4,7 @@ import hashlib
 import math
 from dataclasses import dataclass
 from pathlib import Path
+from statistics import NormalDist
 
 import numpy as np
 import pandas as pd
@@ -12,6 +13,7 @@ from .config import is_read_only
 from .warehouse import connect, query_df, table_exists
 
 RETURN_GUARDRAIL = 0.01
+MAX_BOOTSTRAP_ROWS = 50_000
 HARM_PROBABILITY = 0.10
 CONFIDENT_PROBABILITY = 0.90
 Z_ALPHA = 1.96
@@ -203,6 +205,20 @@ def _bootstrap_difference(
 ) -> tuple[float, float, float]:
     if len(control) == 0 or len(treatment) == 0:
         return 0.0, 0.0, 0.0
+    if max(len(control), len(treatment)) > MAX_BOOTSTRAP_ROWS:
+        # Resampling millions of rows would exhaust memory, and at this size the normal
+        # approximation gives the same answer.
+        difference = float(treatment.mean() - control.mean())
+        error = math.sqrt(
+            float(control.var(ddof=1)) / len(control) + float(treatment.var(ddof=1)) / len(treatment)
+        )
+        if error == 0:
+            return difference, difference, float(difference > 0)
+        return (
+            difference - Z_ALPHA * error,
+            difference + Z_ALPHA * error,
+            NormalDist().cdf(difference / error),
+        )
     rng = np.random.default_rng(seed)
     n_boot = 1200
     control_idx = rng.integers(0, len(control), size=(n_boot, len(control)))

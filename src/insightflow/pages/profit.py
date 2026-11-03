@@ -4,7 +4,7 @@ import streamlit as st
 
 from insightflow.config import DEFAULT_DB_PATH
 from insightflow.currency import money, symbol
-from insightflow.i18n import current_language, t, tr
+from insightflow.i18n import base_period, current_language, t, tr
 from insightflow.live import gauge_strip
 from insightflow.metrics import (
     cost_waterfall,
@@ -51,7 +51,7 @@ def render() -> None:
     page_header(
         t("page.profit.title"),
         tr(
-            f"贡献利润较上期变化 {money(change, code, short=True)}，"
+            f"贡献利润较{base_period()}变化 {money(change, code, short=True)}，"
             f"最大的拖累是{worst['label']}（{money(worst['impact'], code, short=True)}）。",
             f"Contribution profit moved by {money(change, code, short=True)}; the largest drag was "
             f"{worst['label']} ({money(worst['impact'], code, short=True)}).",
@@ -110,7 +110,7 @@ def render() -> None:
     )
     show(
         bridge(
-            tr("上期利润", "Prior profit"),
+            tr("基准期利润", "Base-period profit"),
             float(steps.attrs["start"]),
             steps.loc[steps["impact"].abs() >= 1, ["label", "impact"]],
             tr("本期利润", "This period"),
@@ -122,7 +122,7 @@ def render() -> None:
     note(
         tr(
             f"未解释差额 {money(float(steps.attrs['unexplained']), code, decimals=2)}。"
-            "销量规模按上期单位利润计，结构反映卖得多的商品变了，退货影响含退款、回收成本和处理费。",
+            "销量规模按基准期单位利润计，结构反映卖得多的商品变了，退货影响含退款、回收成本和处理费。",
             f"Unexplained: {money(float(steps.attrs['unexplained']), code, decimals=2)}. Volume uses "
             "last period's unit profit, mix reflects which products sold more, and returns include "
             "refunds, recovered cost and handling.",

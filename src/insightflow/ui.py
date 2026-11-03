@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hmac
+import os
+import time
 from datetime import date, timedelta
 from html import escape
 from pathlib import Path
@@ -15,7 +18,7 @@ from .demo_data import write_demo_csv
 from .design import COLORS, GLOBAL_CSS, SEVERITY, STATUS, configure_plotly
 from .etl import SCHEMA_VERSION, clean_transactions, load_source
 from .geography import country_label, region_label
-from .i18n import LANGUAGES, current_language, language_name, t, tr
+from .i18n import LANGUAGES, base_period, current_language, language_name, t, tr
 from .metrics import (
     FilterSpec,
     available_filters,
@@ -27,10 +30,41 @@ from .metrics import (
 from .provenance import dataset_profile, trust_label
 from .warehouse import build_warehouse, database_version, table_exists, warehouse_schema_version
 
+COMPARE_BASES = ("previous", "year")
+SHARED_SCOPES = (
+    ("regions", "filter_regions", "region"),
+    ("countries", "filter_countries", "country"),
+    ("categories", "filter_categories", "category"),
+    ("channels", "filter_channels", "channel"),
+)
+
 
 def apply_design_system() -> None:
     configure_plotly()
     st.html(GLOBAL_CSS)
+
+
+def require_access() -> None:
+    """Hold the app behind a shared code when INSIGHTFLOW_ACCESS_CODE is set.
+
+    This is a simple door for a small team, not user accounts. Anything facing the open
+    internet still belongs behind HTTPS and a real identity provider.
+    """
+    expected = os.getenv("INSIGHTFLOW_ACCESS_CODE", "").strip()
+    if not expected or st.session_state.get("access_granted"):
+        return
+    st.html(f'<h1 class="if-page-title">{escape(tr("请输入访问码", "Enter the access code"))}</h1>')
+    with st.form("access_form"):
+        code = st.text_input(tr("访问码", "Access code"), type="password")
+        submitted = st.form_submit_button(tr("进入", "Enter"), type="primary")
+    if submitted:
+        if hmac.compare_digest(code.strip().encode(), expected.encode()):
+            st.session_state["access_granted"] = True
+            st.rerun()
+        # A short pause makes guessing a code by hand or by script impractical.
+        time.sleep(1)
+        st.error(tr("访问码不正确。", "That code is not correct."))
+    st.stop()
 
 
 def page_header(title: str, lede: str, *, meta: str | None = None) -> None:
@@ -142,7 +176,11 @@ def gauge_item(
         "symbol": prefix,
         "delta": delta,
         "tone": tone,
-        "note": note_text if note_text is not None else (tr("较上期", "vs prior") if delta else ""),
+        "note": (
+            note_text
+            if note_text is not None
+            else (tr(f"较{base_period()}", f"on {base_period()}") if delta else "")
+        ),
         "spark": [float(value) for value in (spark or [])],
     }
 
@@ -280,6 +318,42 @@ def _trust_display(status: str) -> str:
     return trust_label(status) if current_language() == "zh-CN" else status
 
 
+def _restore_shared_view(min_day: date, max_day: date) -> None:
+    """Open a shared link once per session. Filter values are checked later against the data."""
+    if st.session_state.get("shared_view_read"):
+        return
+    st.session_state["shared_view_read"] = True
+    params = st.query_params
+    for _, key, name in SHARED_SCOPES:
+        values = params.get_all(name)
+        if values:
+            st.session_state[key] = values
+    if params.get("compare") in COMPARE_BASES:
+        st.session_state["compare_basis"] = params["compare"]
+    try:
+        start = date.fromisoformat(params.get("from", ""))
+        end = date.fromisoformat(params.get("to", ""))
+    except ValueError:
+        return
+    if min_day <= start <= end <= max_day:
+        st.session_state["global_analysis_period"] = (start, end)
+
+
+def _publish_view(filters: FilterSpec, default_start: date, max_day: date) -> None:
+    """Keep the address in step with the filters, so a copied link reopens this view."""
+    wanted: dict[str, list[str]] = {}
+    if (filters.start_date, filters.end_date) != (default_start.isoformat(), max_day.isoformat()):
+        wanted.update({"from": [str(filters.start_date)], "to": [str(filters.end_date)]})
+    if filters.compare != "previous":
+        wanted["compare"] = [filters.compare]
+    for attribute, _, name in SHARED_SCOPES:
+        if getattr(filters, attribute):
+            wanted[name] = list(getattr(filters, attribute))
+    current = {key: st.query_params.get_all(key) for key in st.query_params}
+    if current != wanted:
+        st.query_params.from_dict(wanted)
+
+
 def sidebar_filters(db_path: Path = DEFAULT_DB_PATH) -> FilterSpec:
     try:
         ensure_demo_warehouse(db_path)
@@ -294,17 +368,29 @@ def sidebar_filters(db_path: Path = DEFAULT_DB_PATH) -> FilterSpec:
     max_day = date.fromisoformat(max_date)
     min_day = date.fromisoformat(min_date)
     default_start = max(min_day, max_day - timedelta(days=89))
+    _restore_shared_view(min_day, max_day)
+    st.session_state.setdefault("global_analysis_period", (default_start, max_day))
     selected = st.sidebar.date_input(
         t("filters.period"),
-        value=(default_start, max_day),
         min_value=min_day,
         max_value=max_day,
         key="global_analysis_period",
     )
-    if isinstance(selected, tuple) and len(selected) == 2:
-        start, end = selected
-    else:
-        start = end = selected
+    # While a range is half picked the widget holds one date, or none after being cleared.
+    picked = tuple(selected) if isinstance(selected, (tuple, list)) else (selected,)
+    start = picked[0] if picked else default_start
+    end = picked[-1] if picked else max_day
+    st.session_state.setdefault("compare_basis", COMPARE_BASES[0])
+    compare = st.sidebar.selectbox(
+        tr("对比基准", "Compare with"),
+        COMPARE_BASES,
+        format_func=lambda basis: (
+            tr("去年同期", "Same period last year")
+            if basis == "year"
+            else tr("上一周期", "Previous period")
+        ),
+        key="compare_basis",
+    )
 
     db_key = str(db_path.resolve())
     db_version = database_version(db_path)
@@ -426,7 +512,9 @@ def sidebar_filters(db_path: Path = DEFAULT_DB_PATH) -> FilterSpec:
         categories=tuple(categories),
         channels=tuple(channels),
         regions=tuple(regions),
+        compare=compare,
     )
+    _publish_view(current_filters, default_start, max_day)
     coverage = _cached_filter_coverage(
         db_key,
         db_version,

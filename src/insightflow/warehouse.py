@@ -39,12 +39,13 @@ METRIC_CATALOG = [
     ),
 ]
 
-STATUS_CONFIDENCE = {"Verified": 0.95, "Estimated": 0.72, "Simulated": 0.55}
-STATUS_STRENGTH = ["Simulated", "Estimated", "Verified"]
+STATUS_CONFIDENCE = {"Verified": 0.95, "Estimated": 0.72, "Simulated": 0.55, "Missing": 0.0}
+STATUS_STRENGTH = ["Missing", "Simulated", "Estimated", "Verified"]
 STATUS_NOTES = {
     "Verified": "来自导入字段并通过清洗与契约校验",
     "Estimated": "部分成本或经营字段由可追溯规则估算",
     "Simulated": "用于作品演示的模拟数据或参数",
+    "Missing": "来源文件没有这项数据，相关分析不可用",
     "Mixed": "仓库内多批数据来源不同，请按批次核对",
 }
 # Every money aggregate reads the signed ledger, so sales and reversals net to the result
@@ -188,18 +189,41 @@ _MODEL_SQL = """
 
         DROP TABLE IF EXISTS dim_product;
         CREATE TABLE dim_product AS
-        SELECT stock_code,
-               MAX(description) AS description,
-               MAX(category) AS category,
-               AVG(unit_price) AS average_unit_price,
-               AVG(unit_cost) AS average_unit_cost,
-               AVG(price_elasticity) AS price_elasticity,
-               MAX(supplier) AS supplier,
-               MAX(supplier_lead_days) AS supplier_lead_days,
-               MAX(inventory_on_hand) AS inventory_on_hand,
-               MAX(reorder_point) AS reorder_point
-        FROM fact_transactions
-        GROUP BY stock_code;
+        WITH spellings AS (
+            SELECT stock_code, description, COUNT(*) AS lines
+            FROM fact_transactions
+            WHERE sale_valid = 1 AND description IS NOT NULL
+            GROUP BY stock_code, description
+        ), names AS (
+            -- The name shoppers actually bought under, not warehouse notes on the same code.
+            SELECT stock_code, description,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY stock_code ORDER BY lines DESC, description
+                   ) AS position
+            FROM spellings
+        ), latest_stock AS (
+            -- With MAX, SQLite takes bare columns from the row holding the newest date.
+            SELECT stock_code, inventory_on_hand, reorder_point, MAX(invoice_date) AS read_at
+            FROM fact_transactions
+            WHERE inventory_on_hand IS NOT NULL
+            GROUP BY stock_code
+        )
+        SELECT f.stock_code,
+               n.description,
+               MAX(f.category) AS category,
+               AVG(f.unit_price) AS average_unit_price,
+               AVG(f.unit_cost) AS average_unit_cost,
+               AVG(f.price_elasticity) AS price_elasticity,
+               MAX(f.supplier) AS supplier,
+               MAX(f.supplier_lead_days) AS supplier_lead_days,
+               s.inventory_on_hand,
+               s.reorder_point
+        FROM fact_transactions f
+        LEFT JOIN names n ON n.stock_code = f.stock_code AND n.position = 1
+        LEFT JOIN latest_stock s ON s.stock_code = f.stock_code
+        WHERE f.sale_valid = 1
+        GROUP BY f.stock_code;
+        CREATE UNIQUE INDEX idx_dim_product ON dim_product(stock_code);
 
         DROP TABLE IF EXISTS dim_country;
         CREATE TABLE dim_country AS
@@ -273,11 +297,12 @@ _MODEL_SQL = """
         WITH bounds AS (
             SELECT MAX(date) AS max_date FROM v_sales
         ), demand AS (
+            -- Reversals count, so an order placed and cancelled is no demand at all.
             SELECT stock_code,
-                   SUM(CASE WHEN date >= DATE((SELECT max_date FROM bounds), '-89 day') THEN quantity ELSE 0 END) / 90.0 AS avg_daily_units,
-                   SUM(CASE WHEN date >= DATE((SELECT max_date FROM bounds), '-29 day') THEN quantity ELSE 0 END) AS units_30d,
-                   SUM(CASE WHEN date >= DATE((SELECT max_date FROM bounds), '-89 day') THEN quantity ELSE 0 END) AS units_90d
-            FROM v_sales
+                   MAX(SUM(CASE WHEN date >= DATE((SELECT max_date FROM bounds), '-89 day') THEN quantity ELSE 0 END), 0) / 90.0 AS avg_daily_units,
+                   MAX(SUM(CASE WHEN date >= DATE((SELECT max_date FROM bounds), '-29 day') THEN quantity ELSE 0 END), 0) AS units_30d,
+                   MAX(SUM(CASE WHEN date >= DATE((SELECT max_date FROM bounds), '-89 day') THEN quantity ELSE 0 END), 0) AS units_90d
+            FROM v_ledger
             GROUP BY stock_code
         )
         SELECT p.stock_code,
@@ -293,6 +318,7 @@ _MODEL_SQL = """
                CASE WHEN COALESCE(d.avg_daily_units,0) > 0
                     THEN p.inventory_on_hand / d.avg_daily_units ELSE 999 END AS days_of_supply,
                CASE
+                 WHEN p.inventory_on_hand IS NULL THEN 'Unknown'
                  WHEN COALESCE(d.avg_daily_units,0) > 0
                       AND p.inventory_on_hand / d.avg_daily_units < p.supplier_lead_days + 7 THEN 'Reorder'
                  WHEN COALESCE(d.avg_daily_units,0) > 0
@@ -351,7 +377,6 @@ def _seed_governance(conn: sqlite3.Connection, metadata: dict) -> None:
     """Describe the warehouse as it now stands, not just the batch that was loaded last."""
     transaction = _status_shares(conn, "transaction_data_status")
     economic = _status_shares(conn, "economic_data_status")
-    discount = _status_shares(conn, "discount_data_status")
     inventory = _status_shares(conn, "inventory_data_status")
     sources = [
         row[0]
@@ -365,7 +390,7 @@ def _seed_governance(conn: sqlite3.Connection, metadata: dict) -> None:
     )
 
     metric_inputs = {
-        "net_revenue": (transaction, discount),
+        "net_revenue": (transaction,),
         "gross_profit": (transaction, economic),
         "contribution_profit": (transaction, economic),
         "gross_margin": (transaction, economic),
@@ -443,41 +468,37 @@ def _seed_governance(conn: sqlite3.Connection, metadata: dict) -> None:
     target_rows: list[dict] = []
     for idx, row in monthly.iterrows():
         history = monthly.iloc[max(0, idx - 3) : idx]
-        revenue_anchor = (
-            float(history["revenue"].mean()) if not history.empty else float(row["revenue"])
-        )
-        profit_anchor = (
-            float(history["contribution_profit"].mean())
-            if not history.empty
-            else float(row["contribution_profit"])
-        )
+
+        def anchor(column: str, source: pd.DataFrame = history, month: pd.Series = row) -> float:
+            return float(source[column].mean()) if not source.empty else float(month[column] or 0)
+
         target_rows.extend(
             [
                 {
                     "target_period": row["month"],
                     "metric_id": "net_revenue",
-                    "target_value": revenue_anchor * 1.05,
+                    "target_value": anchor("revenue") * 1.05,
                     "direction": "higher",
                     "owner": "Commercial",
                 },
                 {
                     "target_period": row["month"],
                     "metric_id": "contribution_profit",
-                    "target_value": profit_anchor * 1.08,
+                    "target_value": anchor("contribution_profit") * 1.08,
                     "direction": "higher",
                     "owner": "Finance",
                 },
                 {
                     "target_period": row["month"],
                     "metric_id": "gross_margin",
-                    "target_value": 0.42,
+                    "target_value": anchor("gross_margin") + 0.01,
                     "direction": "higher",
                     "owner": "Merchandising",
                 },
                 {
                     "target_period": row["month"],
                     "metric_id": "cancellation_rate",
-                    "target_value": 0.04,
+                    "target_value": anchor("cancellation_rate") * 0.95,
                     "direction": "lower",
                     "owner": "Operations",
                 },
@@ -548,6 +569,23 @@ def _store_quality(
     issues.to_sql("data_contract_issues", conn, if_exists="replace", index=False)
 
 
+def _forget_replaced_warehouse(conn: sqlite3.Connection, simulated: bool) -> None:
+    """A replaced warehouse takes its open findings, and any sample experiments, with it."""
+    conn.execute("DROP TABLE IF EXISTS action_register")
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if simulated or not {"experiment_assignments", "experiment_catalog"} <= tables:
+        return
+    # Experiments a user imported are real and stay; the generated samples never sit
+    # beside real customers.
+    conn.execute("DELETE FROM experiment_assignments WHERE data_status = 'Simulated'")
+    conn.execute(
+        """
+        DELETE FROM experiment_catalog
+        WHERE experiment_id NOT IN (SELECT DISTINCT experiment_id FROM experiment_assignments)
+        """
+    )
+
+
 def build_warehouse(
     result: ETLResult,
     db_path: str | Path,
@@ -559,6 +597,9 @@ def build_warehouse(
 
     with connect(db_path) as conn:
         inserted, skipped = _load_fact(conn, curated, load_mode)
+        if load_mode == "replace":
+            simulated = str(result.metadata.get("transaction_status")) == "Simulated"
+            _forget_replaced_warehouse(conn, simulated)
         _store_quality(conn, result, load_mode, source_name, skipped)
         _refresh_model(conn)
         _seed_governance(conn, result.metadata)
@@ -627,7 +668,7 @@ def table_exists(db_path: str | Path, table: str) -> bool:
     return row is not None
 
 
-@lru_cache(maxsize=512)
+@lru_cache(maxsize=128)
 def _query_df_cached(
     db_path: str,
     version: tuple[int, int, int, int],

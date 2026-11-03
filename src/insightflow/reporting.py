@@ -8,14 +8,16 @@ import pandas as pd
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Inches, Pt
-from jinja2 import Template
+from jinja2 import Environment
+from markupsafe import Markup
 
 from .ai_assistant import executive_summary
 from .config import DEFAULT_CURRENCY
 from .currency import money
 from .diagnostics import DiagnosticIssue
 
-HTML_TEMPLATE = Template(
+# Report text can quote uploaded names, so everything is escaped unless marked safe.
+HTML_TEMPLATE = Environment(autoescape=True).from_string(
     """
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -112,7 +114,7 @@ def trend_svg(trend: pd.DataFrame) -> str:
 def present_drivers(drivers: pd.DataFrame) -> pd.DataFrame:
     labels = {
         "driver": "驱动因素",
-        "previous": "上期",
+        "previous": "基准期",
         "current": "本期",
         "change": "变化",
         "revenue_contribution": "净销售额贡献",
@@ -272,14 +274,14 @@ def render_html_report(
         data_profile=data_profile or "未提供来源标签",
         kpis=format_kpis(kpi, currency),
         issues=issues,
-        drivers_table=_safe_table(present_drivers(drivers)),
-        profit_table=_safe_table(profit_table),
-        targets_table=_safe_table(present_targets(targets)),
-        forecast_table=_safe_table(present_forecast(forecast)),
-        inventory_table=_safe_table(present_inventory(inventory)),
-        quality_table=_safe_table(present_quality(quality)),
-        trend_table=_safe_table(present_trend(trend)),
-        trend_chart=trend_svg(trend),
+        drivers_table=Markup(_safe_table(present_drivers(drivers))),
+        profit_table=Markup(_safe_table(profit_table)),
+        targets_table=Markup(_safe_table(present_targets(targets))),
+        forecast_table=Markup(_safe_table(present_forecast(forecast))),
+        inventory_table=Markup(_safe_table(present_inventory(inventory))),
+        quality_table=Markup(_safe_table(present_quality(quality))),
+        trend_table=Markup(_safe_table(present_trend(trend))),
+        trend_chart=Markup(trend_svg(trend)),
     )
 
 

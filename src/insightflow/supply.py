@@ -15,6 +15,7 @@ LEAD_TIME_VARIATION = 0.20
 
 
 def _daily_demand(db_path: str | Path, days: int) -> tuple[pd.DataFrame, pd.Timestamp]:
+    """Daily net demand: an order cancelled the same day leaves nothing to replenish."""
     last = pd.Timestamp(query_df(db_path, "SELECT MAX(date) FROM v_sales").iloc[0, 0])
     start = (last - pd.Timedelta(days=days - 1)).date().isoformat()
     frame = query_df(
@@ -22,7 +23,7 @@ def _daily_demand(db_path: str | Path, days: int) -> tuple[pd.DataFrame, pd.Time
         """
         SELECT stock_code, date, SUM(quantity) AS units,
                SUM(net_revenue) AS revenue, SUM(contribution_profit) AS profit
-        FROM v_sales WHERE date >= ?
+        FROM v_ledger WHERE date >= ?
         GROUP BY stock_code, date
         """,
         (start,),
@@ -49,10 +50,10 @@ def inventory_policy(
         pd.date_range(last - pd.Timedelta(days=LOOKBACK_DAYS - 1), last).strftime("%Y-%m-%d"),
         fill_value=0.0,
     )
-    mean_daily = wide.mean()
+    mean_daily = wide.mean().clip(lower=0)
     spread_daily = wide.std(ddof=1)
     weekly = wide.groupby(np.arange(len(wide)) // 7).sum()
-    variation = weekly.std(ddof=1) / weekly.mean().replace(0, np.nan)
+    variation = weekly.std(ddof=1) / weekly.mean().where(lambda mean: mean > 0)
     totals = demand.groupby("stock_code")[["revenue", "profit"]].sum()
 
     policy = snapshot.set_index("stock_code").copy()
@@ -85,7 +86,7 @@ def inventory_policy(
     daily_profit = policy["profit_90d"] / LOOKBACK_DAYS
     policy["margin_at_risk"] = (gap_days * daily_profit).clip(lower=0)
 
-    ranked = policy["revenue_90d"].sort_values(ascending=False)
+    ranked = policy["revenue_90d"].clip(lower=0).sort_values(ascending=False)
     share = ranked.cumsum() / max(float(ranked.sum()), 1.0)
     abc = pd.Series(np.select([share <= 0.8, share <= 0.95], ["A", "B"], default="C"), share.index)
     policy["abc_class"] = abc.reindex(policy.index)

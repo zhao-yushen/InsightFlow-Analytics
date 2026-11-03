@@ -3,7 +3,8 @@
 Features are taken at a past cutoff and the label is whether the customer bought in the
 following 90 days. The model trains on an older cutoff and is graded on a newer one, so
 the reported AUC is an honest out-of-time score. If it shows no skill, the page says so
-instead of ranking customers on noise.
+instead of ranking customers on noise. Once graded, the same recipe is refit on the newest
+labelled window, so live scores reflect current behaviour rather than two quarters ago.
 """
 
 from __future__ import annotations
@@ -45,14 +46,15 @@ def _customer_features(db_path: str | Path, cutoff: str) -> pd.DataFrame:
         db_path,
         """
         SELECT customer_id,
-               MIN(date) AS first_date,
-               MAX(date) AS last_date,
-               COUNT(DISTINCT invoice_no) AS orders,
+               MIN(CASE WHEN sale_valid=1 THEN date END) AS first_date,
+               MAX(CASE WHEN sale_valid=1 THEN date END) AS last_date,
+               COUNT(DISTINCT CASE WHEN sale_valid=1 THEN invoice_no END) AS orders,
                SUM(net_revenue) AS revenue,
-               AVG(discount_rate) AS discount_share
-        FROM v_sales
+               AVG(CASE WHEN sale_valid=1 THEN discount_rate END) AS discount_share
+        FROM v_ledger
         WHERE date <= ? AND customer_id IS NOT NULL
         GROUP BY customer_id
+        HAVING orders > 0
         """,
         (cutoff,),
     )
@@ -151,7 +153,7 @@ def _train_cached(db_path: str, version: tuple[int, int, int, int]) -> ChurnMode
         .agg(predicted=("predicted", "mean"), actual=("actual", "mean"), customers=("actual", "size"))
     )
     return ChurnModel(
-        coefficients=beta,
+        coefficients=_fit_logistic(_standardize(test, means, scales), y_test),
         means=means,
         scales=scales,
         auc=area_under_curve(y_test, scores),

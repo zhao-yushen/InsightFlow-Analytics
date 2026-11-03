@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 from insightflow.basket import association_rules
@@ -19,12 +20,21 @@ from insightflow.ui import (
 )
 from insightflow.viz import pareto, quadrant, ranked_bars, show
 
+MAP_PRODUCTS = 400
+
+
+def _head_share(products: pd.DataFrame) -> tuple[int, float]:
+    """Share of net revenue from the top fifth of products, counted across all of them."""
+    revenue = products["revenue"].clip(lower=0)
+    count = max(1, round(len(products) * 0.2))
+    return count, float(revenue.nlargest(count).sum()) / max(float(revenue.sum()), 1.0)
+
 
 def render() -> None:
     filters = sidebar_filters(DEFAULT_DB_PATH)
     code = currency_code()
     prefix = symbol(code)
-    products = product_profitability(DEFAULT_DB_PATH, filters, limit=400)
+    products = product_profitability(DEFAULT_DB_PATH, filters, limit=1_000_000)
     if products.empty:
         page_header(
             t("page.products.title"),
@@ -32,9 +42,7 @@ def render() -> None:
             meta=period_meta(filters),
         )
         return
-    total = max(float(products["revenue"].clip(lower=0).sum()), 1.0)
-    head_count = max(1, round(len(products) * 0.2))
-    head_share = float(products["revenue"].clip(lower=0).nlargest(head_count).sum()) / total
+    head_count, head_share = _head_share(products)
     page_header(
         t("page.products.title"),
         tr(
@@ -63,10 +71,14 @@ def render() -> None:
             key="products_top",
         )
 
-    section_header(tr("商品效率地图", "Product efficiency map"), tr("横线和竖线是中位数", "Lines mark the medians"))
+    leaders = products.head(MAP_PRODUCTS)
+    section_header(
+        tr("商品效率地图", "Product efficiency map"),
+        tr(f"销售额前 {len(leaders)} 的商品，横线和竖线是中位数", f"Top {len(leaders)} products by revenue; lines mark the medians"),
+    )
     show(
         quadrant(
-            products,
+            leaders,
             x="revenue",
             y="contribution_margin",
             size="orders",
@@ -76,7 +88,7 @@ def render() -> None:
         ),
         key="products_quadrant",
     )
-    table_view(products.round(3))
+    table_view(leaders.round(3))
 
     section_header(tr("连带购买", "Bought together"), tr("提升度越高，越不是巧合", "Higher lift means less coincidence"))
     level = st.segmented_control(

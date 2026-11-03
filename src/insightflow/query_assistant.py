@@ -8,7 +8,12 @@ import pandas as pd
 
 from .basket import association_rules
 from .currency import money, warehouse_currency
-from .diagnostics import dimension_change, profit_driver_decomposition, revenue_driver_decomposition
+from .diagnostics import (
+    base_name,
+    dimension_change,
+    profit_driver_decomposition,
+    revenue_driver_decomposition,
+)
 from .elasticity import category_price_moves
 from .forecasting import forecast_metric
 from .metrics import (
@@ -22,6 +27,7 @@ from .metrics import (
     quality_dimensions,
     target_status,
 )
+from .provenance import dataset_profile
 
 
 @dataclass
@@ -124,6 +130,8 @@ def answer_business_question(
     def amount(value: float) -> str:
         return money(value, code)
 
+    base = base_name(filters, language)
+
     if intent == "unsupported":
         return QueryAnswer(
             "unsupported",
@@ -149,9 +157,9 @@ def answer_business_question(
             "profit_driver_v2",
             say("贡献利润变化原因", "Contribution-profit drivers"),
             say(
-                f"本期贡献利润较上期变化 {amount(delta)}。最大负向因素是“{worst['driver']}”，"
+                f"本期贡献利润较{base}变化 {amount(delta)}。最大负向因素是“{worst['driver']}”，"
                 f"影响约 {amount(worst['profit_contribution'])}。应先检查商品成本、折扣和可变经营费用。",
-                f"Contribution profit changed by {amount(delta)} versus the previous period. "
+                f"Contribution profit changed by {amount(delta)} versus {base}. "
                 f"The largest negative driver was {worst['driver']}, with an estimated impact of "
                 f"{amount(worst['profit_contribution'])}. Review product cost, discounting, and "
                 "variable operating expenses first.",
@@ -173,9 +181,9 @@ def answer_business_question(
             "revenue_driver_v1",
             say("收入变化驱动", "Revenue change drivers"),
             say(
-                f"本期净销售额较上期变化 {amount(delta)}。影响最负的因素是“{worst['driver']}”，"
+                f"本期净销售额较{base}变化 {amount(delta)}。影响最负的因素是“{worst['driver']}”，"
                 f"约 {amount(worst['revenue_contribution'])}。",
-                f"Net revenue changed by {amount(delta)}. The weakest driver was {worst['driver']}, "
+                f"Net revenue changed by {amount(delta)} versus {base}. The weakest driver was {worst['driver']}, "
                 f"about {amount(worst['revenue_contribution'])}.",
             ),
             data,
@@ -402,6 +410,18 @@ def answer_business_question(
         )
 
     if intent == "inventory_risk":
+        if str(dataset_profile(db_path).get("inventory_status")) == "Missing":
+            return QueryAnswer(
+                "inventory_reorder_v1",
+                say("补货风险SKU", "Replenishment-risk SKUs"),
+                say(
+                    "这份数据没有库存字段，无法判断补货风险。导入时映射库存字段后再问。",
+                    "This data has no stock levels, so reorder risk cannot be judged. Map a "
+                    "stock field on import and ask again.",
+                ),
+                pd.DataFrame(),
+                say("缺少现有库存时不做推断。", "Nothing is inferred without stock on hand."),
+            )
         data = inventory_status(db_path, "Reorder").head(30)
         count = len(inventory_status(db_path, "Reorder"))
         return QueryAnswer(

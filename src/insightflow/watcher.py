@@ -14,7 +14,6 @@ from .config import (
     REJECTED_DIR,
     ensure_directories,
 )
-from .data_contracts import contract_block_message
 from .etl import clean_transactions, load_source
 from .ingest import SUPPORTED_SUFFIXES, auto_canonicalize
 from .warehouse import build_warehouse
@@ -36,9 +35,9 @@ def process_incoming_file(source: Path, db_path: Path = DEFAULT_DB_PATH) -> dict
             source_profile="watched_incremental_import",
             transaction_status="Verified",
         )
-        block_message = contract_block_message(result.contract_issues)
-        if block_message:
-            raise ValueError(block_message)
+        block_reasons = result.block_reasons()
+        if block_reasons:
+            raise ValueError("；".join(block_reasons))
         stats = build_warehouse(
             result,
             db_path,

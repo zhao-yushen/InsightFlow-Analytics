@@ -52,7 +52,7 @@ _TOOLTIP_CSS = """
 .tip span { display: block; color: #B4C7DF; }
 """
 
-_RIVER_HTML = '<div class="river" role="img"><div class="stage"></div><div class="tip"></div></div>'
+_RIVER_HTML = '<div class="river" role="group"><div class="stage"></div><div class="tip"></div></div>'
 _RIVER_CSS = (
     _TOOLTIP_CSS
     + """
@@ -60,7 +60,7 @@ _RIVER_CSS = (
 .stage { position: relative; width: 100%; }
 svg, canvas { position: absolute; inset: 0; display: block; }
 canvas { pointer-events: none; mix-blend-mode: screen; }
-.branch { cursor: help; transition: opacity .16s ease; outline: none; }
+.branch { cursor: pointer; transition: opacity .16s ease; outline: none; }
 .river.focusing .branch { opacity: .32; }
 .river.focusing .branch.active { opacity: 1; }
 .label { position: absolute; line-height: 1.35; opacity: 0; transition: opacity .5s ease; }
@@ -73,7 +73,9 @@ canvas { pointer-events: none; mix-blend-mode: screen; }
 .sink { text-align: left; }
 .sink .name { color: #FFC44D; }
 .sink .value { color: #FFC44D; font-size: clamp(1.6rem, 2.6vw, 2.3rem); letter-spacing: -.03em; }
-.leak { transform: translateX(-50%); text-align: center; width: 6.6rem; }
+.leak { transform: translateX(-50%); text-align: center; width: 6.6rem; cursor: pointer; border-radius: 6px; }
+.leak:focus-visible { outline: 2px solid #38D6C4; outline-offset: 3px; }
+.leak.picked .name { color: #FF7B6B; text-decoration: underline; text-underline-offset: 3px; }
 .leak .value { font-size: .95rem; }
 .leak.active .name { color: #FF7B6B; }
 .river.compact .leak { width: 3.5rem; }
@@ -155,7 +157,7 @@ function bezier(p, t) {
   return m * m * m * p[0] + 3 * m * m * t * p[1] + 3 * m * t * t * p[2] + t * t * t * p[3];
 }
 
-function createRiver(root) {
+function createRiver(root, pick) {
   const stage = root.querySelector(".stage");
   const tip = root.querySelector(".tip");
   const svg = document.createElementNS(SVG, "svg");
@@ -228,15 +230,25 @@ function createRiver(root) {
         leak.key
       );
       node.tabIndex = 0;
+      node.setAttribute("role", "button");
+      node.setAttribute("aria-label", `${leak.label} ${leak.display}, ${leak.share}. ${data.pickHint}`);
+      node.classList.toggle("picked", leak.key === data.picked);
       node.addEventListener("focus", () => showTip(leak));
       node.addEventListener("blur", hideTip);
       node.addEventListener("pointerenter", (event) => showTip(leak, event));
       node.addEventListener("pointerleave", hideTip);
+      node.addEventListener("click", () => pick(leak.key));
+      node.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        pick(leak.key);
+      });
     });
     svg.querySelectorAll(".branch").forEach((path, index) => {
       const leak = g.leaks[index];
       path.addEventListener("pointermove", (event) => showTip(leak, event));
       path.addEventListener("pointerleave", hideTip);
+      path.addEventListener("click", () => pick(leak.key));
     });
     root.setAttribute("aria-label", data.summary);
     context = fitCanvas(canvas, width, g.height);
@@ -321,10 +333,11 @@ function createRiver(root) {
   };
 }
 
-export default function ({ data, parentElement }) {
+export default function ({ data, parentElement, setTriggerValue }) {
   const root = parentElement.querySelector(".river");
+  root._pick = (key) => setTriggerValue("picked", key);
   const first = !root._river;
-  if (first) root._river = createRiver(root);
+  if (first) root._river = createRiver(root, (key) => root._pick(key));
   root._river.update(data, first);
   return () => { root._river?.destroy(); root._river = null; };
 }
@@ -541,7 +554,7 @@ export default function ({ data, parentElement }) {
 """
 )
 
-_GLOBE_HTML = '<div class="globe" tabindex="0" role="application"><canvas></canvas><div class="tip"></div></div>'
+_GLOBE_HTML = '<div class="globe" tabindex="0" role="application"><canvas></canvas><div class="tip" aria-live="polite"></div></div>'
 _GLOBE_CSS = (
     _TOOLTIP_CSS
     + """
@@ -570,6 +583,7 @@ function createGlobe(root, onSelect) {
   let markets = [], width = 0, height = 0, context = null, radius = 0, cx = 0, cy = 0;
   let spin = 0, tilt = 0.32, frame = 0, visible = true, last = 0, selected = null;
   let dragging = false, moved = 0, hover = null, startX = 0, startY = 0, baseSpin = 0, baseTilt = 0;
+  let cursor = -1;
 
   const resize = () => {
     width = Math.max(root.clientWidth, 300);
@@ -649,6 +663,21 @@ function createGlobe(root, onSelect) {
     return { best, x, y };
   }
 
+  function describe(market, x, y) {
+    tip.innerHTML = `<b>${esc(market.label)}</b><span>${esc(market.revenue)}</span><span>${esc(market.margin)}</span><span>${esc(market.shareText)}</span>`;
+    tip.style.left = `${clamp(x + 14, 0, width - 180)}px`;
+    tip.style.top = `${clamp(y - 30, 0, height - 110)}px`;
+    tip.classList.add("on");
+  }
+
+  function stepTo(index) {
+    cursor = (index + markets.length) % markets.length;
+    hover = markets[cursor];
+    spin = -hover.lon * RAD;
+    draw();
+    describe(hover, hover._x, hover._y);
+  }
+
   root.addEventListener("pointerdown", (event) => {
     dragging = true; moved = 0; startX = event.clientX; startY = event.clientY; baseSpin = spin; baseTilt = tilt;
     root.setPointerCapture(event.pointerId);
@@ -664,10 +693,7 @@ function createGlobe(root, onSelect) {
     const { best, x, y } = pick(event);
     hover = best;
     if (best) {
-      tip.innerHTML = `<b>${esc(best.label)}</b><span>${esc(best.revenue)}</span><span>${esc(best.margin)}</span><span>${esc(best.shareText)}</span>`;
-      tip.style.left = `${clamp(x + 14, 0, width - 180)}px`;
-      tip.style.top = `${clamp(y - 30, 0, height - 110)}px`;
-      tip.classList.add("on");
+      describe(best, x, y);
       root.style.cursor = "pointer";
     } else {
       tip.classList.remove("on");
@@ -686,7 +712,12 @@ function createGlobe(root, onSelect) {
   root.addEventListener("keydown", (event) => {
     const moves = { ArrowLeft: 0.2, ArrowRight: -0.2 };
     if (event.key in moves) { spin += moves[event.key]; draw(); event.preventDefault(); }
+    if (!markets.length) return;
+    if (event.key === "ArrowDown") { stepTo(cursor + 1); event.preventDefault(); }
+    if (event.key === "ArrowUp") { stepTo(Math.max(cursor, 0) - 1); event.preventDefault(); }
+    if (event.key === "Enter" && hover) { selected = hover.name; onSelect(hover.name); draw(); event.preventDefault(); }
   });
+  root.addEventListener("blur", () => { hover = null; cursor = -1; tip.classList.remove("on"); });
 
   const observer = new ResizeObserver(() => { resize(); draw(); });
   observer.observe(root);
@@ -737,8 +768,10 @@ globe = st.components.v2.component(
 )
 
 
-def money_river(payload: dict[str, Any], *, key: str) -> None:
-    river(data=payload, key=key)
+def money_river(payload: dict[str, Any], *, key: str) -> str | None:
+    """Show the river and return the outflow clicked on this run, if any."""
+    result = river(data=payload, key=key, on_picked_change=lambda: None)
+    return getattr(result, "picked", None)
 
 
 def gauge_strip(items: list[dict[str, Any]], *, key: str) -> None:

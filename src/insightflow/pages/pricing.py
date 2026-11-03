@@ -8,6 +8,7 @@ from insightflow.currency import money, symbol
 from insightflow.design import COLORS
 from insightflow.elasticity import category_price_moves, estimate_elasticities
 from insightflow.i18n import t, tr
+from insightflow.provenance import dataset_profile
 from insightflow.ui import (
     currency_code,
     note,
@@ -70,20 +71,43 @@ def render() -> None:
         )
         return
     measured = int((table["basis"] == "data").sum())
-    best = moves.iloc[0]
+    robust = moves[moves["robust"]]
     capped = bool(moves["capped"].mean() > 0.6)
-    page_header(
-        t("page.pricing.title"),
-        tr(
-            f"{len(table)} 个品类中有 {measured} 个可由订单数据测出价格反应。"
-            f"潜力最大的是 {best['category']}：调价 {best['recommended_move']:+.0%} "
-            f"预计增加贡献利润 {money(float(best['expected_profit_change']), code, short=True)}。",
-            f"Price response is measurable for {measured} of {len(table)} categories. "
-            f"{best['category']} has the largest opportunity: {best['recommended_move']:+.0%} for "
-            f"about {money(float(best['expected_profit_change']), code, short=True)} of contribution profit.",
-        ),
-        meta=period_meta(filters),
-    )
+    costs_known = str(dataset_profile(DEFAULT_DB_PATH).get("economic_status")) in {
+        "Verified",
+        "Simulated",
+    }
+
+    def span(row) -> str:
+        low = money(float(row["profit_change_low"]), code, short=True)
+        high = money(float(row["profit_change_high"]), code, short=True)
+        return f"{low} ~ {high}"
+
+    if not costs_known:
+        lede = tr(
+            f"{len(table)} 个品类中有 {measured} 个可由订单数据测出价格反应。成本是估算值，"
+            "下面的调价收益只能看方向，不能当作预期利润。",
+            f"Price response is measurable for {measured} of {len(table)} categories. Costs are "
+            "estimated, so the gains below show direction, not expected profit.",
+        )
+    elif robust.empty:
+        lede = tr(
+            f"{len(table)} 个品类中有 {measured} 个可由订单数据测出价格反应，"
+            "但没有哪个品类的调价能在弹性的 95% 区间内都赚钱。",
+            f"Price response is measurable for {measured} of {len(table)} categories, but no "
+            "move stays profitable across the elasticity's 95% interval.",
+        )
+    else:
+        best = robust.iloc[0]
+        lede = tr(
+            f"{len(table)} 个品类中有 {measured} 个可由订单数据测出价格反应，{len(robust)} 个品类的调价"
+            f"稳健。潜力最大的是 {best['category']}：调价 {best['recommended_move']:+.0%}，"
+            f"贡献利润预计变化 {span(best)}。",
+            f"Price response is measurable for {measured} of {len(table)} categories, and "
+            f"{len(robust)} moves hold up. {best['category']} has the largest opportunity: "
+            f"{best['recommended_move']:+.0%} for {span(best)} of contribution profit.",
+        )
+    page_header(t("page.pricing.title"), lede, meta=period_meta(filters))
 
     section_header(
         tr("顾客对价格有多敏感", "How sensitive customers are to price"),
@@ -92,9 +116,11 @@ def render() -> None:
     show(_elasticity_chart(table), key="pricing_elasticity")
     note(
         tr(
-            "按周统计每个商品的订单数和实际售价，并扣除商品本身受欢迎程度和季节的影响。数据太少时回到行业假设。",
-            "Weekly orders and paid prices per product, with each product's popularity and each "
-            "week's season removed. With thin data the result falls back to the assumption.",
+            "按周统计每个商品在各销售渠道的订单数和实际售价，并扣除商品本身受欢迎程度和季节的影响。"
+            "不同渠道和匿名订单常用不同价目表，所以分开跟踪。数据太少时回到行业假设。",
+            "Weekly orders and paid prices per product in each sales stream, with popularity and "
+            "season removed. Streams often use different price lists, so each is followed on its "
+            "own. With thin data the result falls back to the assumption.",
         )
     )
 
@@ -122,6 +148,8 @@ def render() -> None:
             "current_price": tr("当前均价", "Average price"),
             "unit_variable_cost": tr("单位变动成本", "Unit variable cost"),
             "recommended_move": tr("建议调价", "Suggested move"),
+            "profit_change_low": tr("利润区间下限", "Profit, low end"),
+            "profit_change_high": tr("利润区间上限", "Profit, high end"),
             "expected_revenue_change": tr("收入变化", "Revenue change"),
         }
         st.dataframe(
@@ -131,8 +159,20 @@ def render() -> None:
                 columns["current_price"]: st.column_config.NumberColumn(format="%.2f"),
                 columns["unit_variable_cost"]: st.column_config.NumberColumn(format="%.2f"),
                 columns["recommended_move"]: st.column_config.NumberColumn(format="percent"),
+                columns["profit_change_low"]: st.column_config.NumberColumn(format="%,.0f"),
+                columns["profit_change_high"]: st.column_config.NumberColumn(format="%,.0f"),
                 columns["expected_revenue_change"]: st.column_config.NumberColumn(format="%,.0f"),
             },
+        )
+    if not costs_known:
+        verdict(
+            tr("成本是估算值", "Costs are estimated"),
+            tr(
+                "这份数据没有真实成本，利润变化按规则成本计算，只能看方向。导入成本字段后这里才是可用的金额。",
+                "This data has no real costs, so profit changes rest on rule-based costs and show "
+                "direction only. Import a cost field to get usable amounts.",
+            ),
+            "warning",
         )
     if capped:
         verdict(

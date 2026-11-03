@@ -5,11 +5,12 @@ Sources         CSV, TSV, Excel, Parquet, JSON, seven-table demo, UCI, Olist
    |
 Ingest          ingest.py: decoding, tolerant parsing, field mapping, derivations
    |
-Contract        data_contracts.py: checks the raw values, blocks P0 and P1
+Contract        data_contracts.py: checks the raw values, names the rule each bad row breaks
    |
-ETL             etl.py: rule-based filling, line provenance, signed line economics
+ETL             etl.py: sets rows aside, rule-based filling, line provenance, signed economics
    |
 Warehouse       warehouse.py: SQLite fact and dimensions, v_ledger, v_sales, governance
+                backup.py: a copy before every import, with restore
    |
 Analytics       metrics, pvm, diagnostics, forecasting, elasticity, churn, supply, basket
    |
@@ -20,7 +21,9 @@ Delivery        pages (Streamlit), narrative, reporting, query_assistant, Power 
 
 ## Key ideas
 
-**One signed ledger.** `v_ledger` holds every valid line, with reversals negative. Money metrics read it, so results after returns are automatic at any grain. `v_sales` holds positive sales only, for order counts and demand.
+**One signed ledger.** `v_ledger` holds every valid line, with reversals negative. Money metrics and demand read it, so results after returns are automatic at any grain. `v_sales` holds positive sales only, for order counts.
+
+**Nothing is thrown away.** A line that breaks the contract, or is postage or a fee rather than goods, stays in `fact_transactions` with its `reject_reason` and leaves every metric. Net revenue plus the value of those lines reconciles to the file.
 
 **Trust is computed from rows.** Provenance is stored per line. `metric_catalog` and `data_profiles` are rebuilt from the whole warehouse after every load, and never copied from the latest batch.
 
@@ -46,5 +49,7 @@ The animated components use no external libraries, so the app works offline. The
 - Filter values reach SQL only as bound parameters, and dimension names come from allowlists.
 - Fault injection runs in memory and cannot touch the warehouse.
 - Read-only mode blocks action writes, imports, drills and server-side report files.
+- `INSIGHTFLOW_ACCESS_CODE` holds the app behind one shared code, compared in constant time. It is a door for a small team, not user accounts.
+- Data Hub copies the warehouse before every import and keeps the last three. A restore backs up what it replaces first.
 - The LLM summary is optional and never calculates a metric.
 - The warehouse records its schema version. Demo warehouses rebuild themselves after a definition change, and real ones ask for a re-import.

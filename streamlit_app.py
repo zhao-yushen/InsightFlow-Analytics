@@ -29,7 +29,7 @@ from insightflow.pages import (
     report,
     sales,
 )
-from insightflow.ui import apply_design_system, render_app_brand
+from insightflow.ui import apply_design_system, render_app_brand, require_access
 
 ensure_directories(allow_write=not is_read_only())
 
@@ -42,6 +42,7 @@ st.set_page_config(
 
 apply_design_system()
 render_app_brand()
+require_access()
 
 pages = {
     t("nav.executive"): [

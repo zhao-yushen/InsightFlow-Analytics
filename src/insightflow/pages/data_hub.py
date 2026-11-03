@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import hashlib
+
 import pandas as pd
 import streamlit as st
 
+from insightflow.backup import KEEP_BACKUPS, create_backup, list_backups, restore_backup
 from insightflow.config import DEFAULT_DB_PATH, INCOMING_DIR, is_read_only
 from insightflow.currency import SYMBOLS, warehouse_currency
-from insightflow.data_contracts import blocking_contract_issues
-from insightflow.etl import clean_transactions
+from insightflow.etl import NON_MERCHANDISE, ETLResult, clean_transactions
 from insightflow.i18n import t, tr
 from insightflow.ingest import (
     SUPPORTED_SUFFIXES,
@@ -17,6 +19,8 @@ from insightflow.ingest import (
 )
 from insightflow.live import gauge_strip
 from insightflow.metrics import date_bounds, filter_option_counts
+from insightflow.narrative import rejection_table
+from insightflow.provenance import dataset_profile
 from insightflow.ui import (
     gauge_item,
     note,
@@ -55,11 +59,67 @@ OPTIONAL_FIELDS = {
     "currency": ("币种", "Currency"),
 }
 NOT_MAPPED = "—"
+REJECTED_COLUMNS = [
+    "reject_reason",
+    "invoice_no",
+    "stock_code",
+    "description",
+    "quantity",
+    "invoice_date",
+    "unit_price",
+    "customer_id",
+    "country",
+    "channel",
+]
 
 
-@st.cache_data(show_spinner=False, max_entries=8)
-def _read_upload(name: str, content: bytes) -> pd.DataFrame:
-    return read_table(content, name)
+def _read_upload(name: str, content: bytes) -> tuple[str, pd.DataFrame]:
+    """Read a file once. Widget changes rerun the page, and a large workbook takes a minute."""
+    digest = hashlib.sha256(content).hexdigest()
+    held = st.session_state.get("import_frame")
+    if held and held[0] == digest:
+        return digest, held[1]
+    with st.spinner(tr("正在读取文件，大文件可能需要一分钟……", "Reading the file. Large files can take a minute.")):
+        frame = read_table(content, name)
+    st.session_state["import_frame"] = (digest, frame)
+    return digest, frame
+
+
+def _prepare_import(
+    frame: pd.DataFrame,
+    digest: str,
+    mapping: dict[str, str],
+    default_country: str,
+    file_code: str,
+    target_code: str,
+    rates: dict[str, float],
+) -> tuple[ETLResult, list[str], bytes]:
+    """Clean the file once per set of choices, so ticking a box does not redo the work."""
+    key = (
+        digest,
+        tuple(sorted(mapping.items())),
+        default_country,
+        file_code,
+        target_code,
+        tuple(sorted(rates.items())),
+    )
+    held = st.session_state.get("import_result")
+    if held and held[0] == key:
+        return held[1], held[2], held[3]
+    with st.spinner(tr("正在清洗和校验数据……", "Cleaning and checking the data.")):
+        canonical, notes = apply_mapping(frame, mapping, default_country=default_country)
+        if "currency" not in canonical:
+            canonical["currency"] = file_code
+        result = clean_transactions(
+            canonical,
+            source_profile="web_incremental_import",
+            transaction_status="Verified",
+            currency=target_code,
+            fx_rates=rates,
+        )
+        held_back = result.rejected[REJECTED_COLUMNS].to_csv(index=False).encode("utf-8-sig")
+    st.session_state["import_result"] = (key, result, notes, held_back)
+    return result, notes, held_back
 
 
 def _template_csv() -> bytes:
@@ -146,7 +206,7 @@ def _upload_flow(read_only: bool, warehouse_code: str) -> None:
     if uploaded is None:
         return
     try:
-        frame = _read_upload(uploaded.name, uploaded.getvalue())
+        digest, frame = _read_upload(uploaded.name, uploaded.getvalue())
     except Exception as error:
         st.error(tr(f"无法读取文件：{error}", f"Could not read the file: {error}"))
         return
@@ -174,13 +234,25 @@ def _upload_flow(read_only: bool, warehouse_code: str) -> None:
             codes,
             index=codes.index(warehouse_code) if warehouse_code in codes else 0,
         )
-    load_mode = "append"
+    # The first real file must not land on top of the demo, where every total would be a
+    # silent blend of real and simulated rows.
+    on_demo = str(dataset_profile(DEFAULT_DB_PATH).get("transaction_status")) == "Simulated"
     with right:
         replace = st.toggle(
             tr("替换仓库全部数据", "Replace the whole warehouse"),
+            value=on_demo,
             help=t("data.replace_warning"),
+            key="import_replace",
         )
         load_mode = "replace" if replace else "append"
+        if on_demo:
+            st.caption(
+                tr(
+                    "当前仓库是演示数据，默认替换，避免真实数据和模拟数据混在一起。",
+                    "The warehouse holds demo data, so this replaces it by default and keeps real "
+                    "and simulated rows apart.",
+                )
+            )
     target_code = file_code if replace else warehouse_code
     rates: dict[str, float] = {}
     if file_code != target_code:
@@ -193,17 +265,12 @@ def _upload_flow(read_only: bool, warehouse_code: str) -> None:
         )
         rates[file_code] = rate
 
-    canonical, notes = apply_mapping(frame, mapping, default_country=default_country)
-    if "currency" not in canonical:
-        canonical["currency"] = file_code
-    result = clean_transactions(
-        canonical,
-        source_profile="web_incremental_import",
-        transaction_status="Verified",
-        currency=target_code,
-        fx_rates=rates,
+    result, notes, held_back = _prepare_import(
+        frame, digest, mapping, default_country, file_code, target_code, rates
     )
-    blocking = blocking_contract_issues(result.contract_issues)
+    blockers = result.block_reasons()
+    problems = result.problem_rows
+    services = int((result.curated["reject_reason"] == NON_MERCHANDISE).sum())
     warnings = int((result.contract_issues["severity"] == "P2").sum())
     score = float(result.quality_dimensions["score_100"].mean())
 
@@ -212,28 +279,51 @@ def _upload_flow(read_only: bool, warehouse_code: str) -> None:
         [
             gauge_item(tr("文件行数", "Rows in file"), len(frame), "count", f"{len(frame):,}", note_text=""),
             gauge_item(tr("有效销售行", "Valid sales rows"), result.metadata["valid_sales_rows"], "count", f"{result.metadata['valid_sales_rows']:,}", note_text=""),
+            gauge_item(tr("问题行", "Problem rows"), problems, "count", f"{problems:,}", note_text=f"{result.problem_share:.2%}"),
+            gauge_item(tr("非商品行", "Non-merchandise"), services, "count", f"{services:,}", note_text=tr("运费、手续费等", "Postage, fees")),
             gauge_item(tr("质量得分", "Quality score"), score, "count", f"{score:.1f}", note_text="/100"),
-            gauge_item(tr("阻断问题", "Blocking issues"), len(blocking), "count", f"{len(blocking)}", note_text=""),
         ],
         key="data_hub_precheck",
     )
     for item in notes:
         st.caption(item)
-    if not blocking.empty:
-        verdict(
-            tr("不能导入", "Cannot import"),
-            tr("下列问题必须先在源文件中修复。", "Fix the issues below in the source file first."),
-            "bad",
+    if result.metadata["category_source"] == "derived":
+        st.caption(
+            tr(
+                "文件没有品类字段，已按商品名称里的名词自动归为商品族。",
+                "The file has no category field, so products were grouped into families by the "
+                "nouns in their names.",
+            )
         )
+    if blockers:
+        verdict(tr("不能导入", "Cannot import"), "；".join(blockers), "bad")
         st.dataframe(result.contract_issues, hide_index=True)
+    elif problems:
+        verdict(
+            tr("需要你确认", "Needs your decision"),
+            tr(
+                f"{problems:,} 行不符合规则。它们会保留在仓库里备查，但不计入任何指标。",
+                f"{problems:,} rows break the rules. They stay in the warehouse for audit but "
+                "count toward no metric.",
+            ),
+            "warning",
+        )
     elif warnings:
         verdict(
             tr("可以导入", "Ready to import"),
-            tr(f"有 {warnings} 项未登记类别的提示，不影响导入。", f"{warnings} unregistered-category notes; these do not block import."),
+            tr(f"有 {warnings} 项提示，不影响导入。", f"{warnings} notes; these do not block import."),
             "warning",
         )
     else:
         verdict(tr("可以导入", "Ready to import"), tr("数据通过全部契约检查。", "All contract checks passed."), "good")
+    if not result.rejected.empty:
+        st.dataframe(rejection_table(result.rejection_summary(), target_code), hide_index=True)
+        st.download_button(
+            tr("下载这些行", "Download these rows"),
+            held_back,
+            file_name="insightflow_rows_held_back.csv",
+            mime="text/csv",
+        )
     with st.expander(tr("预览清洗结果", "Preview cleaned data")):
         st.dataframe(result.curated.head(100), hide_index=True)
 
@@ -241,20 +331,35 @@ def _upload_flow(read_only: bool, warehouse_code: str) -> None:
         st.info(t("data.read_only"))
     if replace:
         st.warning(t("data.replace_warning"))
+    agreed = True
+    if problems and not blockers:
+        agreed = st.checkbox(
+            tr(f"隔离这 {problems:,} 行，继续导入", f"Set these {problems:,} rows aside and continue"),
+            key="import_isolate",
+        )
     if st.button(
         tr("确认导入", "Import data"),
         type="primary",
-        disabled=read_only or not blocking.empty,
+        disabled=read_only or bool(blockers) or not agreed,
     ):
         try:
-            stats = build_warehouse(
-                result, DEFAULT_DB_PATH, load_mode=load_mode, source_name=uploaded.name
-            )
+            with st.spinner(tr("正在备份并写入仓库……", "Backing up and writing to the warehouse.")):
+                create_backup(DEFAULT_DB_PATH)
+                stats = build_warehouse(
+                    result, DEFAULT_DB_PATH, load_mode=load_mode, source_name=uploaded.name
+                )
         except ValueError as error:
             st.error(str(error))
             return
         st.cache_data.clear()
-        st.session_state.pop("global_analysis_period", None)
+        for key in (
+            "global_analysis_period",
+            "import_result",
+            "import_frame",
+            "import_isolate",
+            "import_replace",
+        ):
+            st.session_state.pop(key, None)
         if load_mode == "replace":
             for key in ("filter_regions", "filter_countries", "filter_categories", "filter_channels"):
                 st.session_state.pop(key, None)
@@ -262,21 +367,48 @@ def _upload_flow(read_only: bool, warehouse_code: str) -> None:
         st.rerun()
 
 
+def _backup_section(read_only: bool) -> None:
+    section_header(
+        tr("备份与恢复", "Backups"),
+        tr(f"每次导入前自动备份，保留最近 {KEEP_BACKUPS} 份", f"Taken before every import; the last {KEEP_BACKUPS} are kept"),
+    )
+    backups = list_backups(DEFAULT_DB_PATH)
+    if not backups:
+        note(tr("还没有备份。第一次导入前会自动创建。", "No backups yet. One is made before the first import."))
+        return
+    labels = {
+        path.name: f"{path.name[12:16]}-{path.name[16:18]}-{path.name[18:20]} "
+        f"{path.name[21:23]}:{path.name[23:25]}:{path.name[25:27]} UTC, "
+        f"{path.stat().st_size / 1_048_576:,.0f} MB"
+        for path in backups
+    }
+    chosen = st.selectbox(tr("选择备份", "Backup"), list(labels), format_func=labels.get)
+    agreed = st.checkbox(
+        tr("我知道当前仓库会被这份备份替换（替换前会再存一份）", "Replace the current warehouse with this backup (it is saved first)"),
+        key="restore_agreed",
+    )
+    if st.button(tr("恢复这份备份", "Restore this backup"), disabled=read_only or not agreed):
+        with st.spinner(tr("正在恢复……", "Restoring.")):
+            restore_backup(chosen, DEFAULT_DB_PATH)
+        st.cache_data.clear()
+        st.session_state.pop("global_analysis_period", None)
+        st.session_state.pop("restore_agreed", None)
+        st.rerun()
+
+
 def render() -> None:
     sidebar_filters(DEFAULT_DB_PATH)
     read_only = is_read_only()
     code = warehouse_currency(DEFAULT_DB_PATH)
-    total = query_df(
-        DEFAULT_DB_PATH,
-        "SELECT COUNT(*) AS rows, MIN(date) AS min_date, MAX(date) AS max_date FROM fact_transactions",
-    ).iloc[0]
+    rows = int(query_df(DEFAULT_DB_PATH, "SELECT COUNT(*) FROM fact_transactions").iloc[0, 0])
+    first_day, last_day = date_bounds(DEFAULT_DB_PATH)
     counts = filter_option_counts(DEFAULT_DB_PATH)
     page_header(
         t("page.data_hub.title"),
         tr(
-            f"仓库现有 {int(total['rows']):,} 行交易，覆盖 {total['min_date']} 至 {total['max_date']}，报告币种 {code}。",
-            f"The warehouse holds {int(total['rows']):,} transaction rows from {total['min_date']} to "
-            f"{total['max_date']}, reported in {code}.",
+            f"仓库现有 {rows:,} 行交易，覆盖 {first_day} 至 {last_day}，报告币种 {code}。",
+            f"The warehouse holds {rows:,} transaction rows from {first_day} to {last_day}, "
+            f"reported in {code}.",
         ),
         meta=trust_sentence(DEFAULT_DB_PATH),
     )
@@ -289,6 +421,7 @@ def render() -> None:
         key="data_hub_gauges",
     )
     _upload_flow(read_only, code)
+    _backup_section(read_only)
 
     section_header(tr("监听文件夹", "Watched folder"), tr("文件放入后自动导入", "Files dropped here import automatically"))
     st.code(f"insightflow watch --interval 30\n# {INCOMING_DIR}", language="powershell")

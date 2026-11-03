@@ -3,11 +3,20 @@ from __future__ import annotations
 import streamlit as st
 
 from insightflow.config import DEFAULT_DB_PATH, is_read_only
+from insightflow.currency import warehouse_currency
 from insightflow.etl import clean_transactions
 from insightflow.fault_injection import FaultPlan, inject_faults
 from insightflow.i18n import t, tr
 from insightflow.live import gauge_strip
-from insightflow.metrics import data_lineage, quality_dimensions, quality_score, quality_summary
+from insightflow.metrics import (
+    data_lineage,
+    quality_dimensions,
+    quality_score,
+    quality_summary,
+    rejected_rows,
+    rejection_summary,
+)
+from insightflow.narrative import rejection_table
 from insightflow.provenance import dataset_profile, metric_trust_table, trust_label
 from insightflow.ui import (
     gauge_item,
@@ -47,11 +56,14 @@ def render() -> None:
     score = quality_score(DEFAULT_DB_PATH)
     contract = query_df(DEFAULT_DB_PATH, "SELECT * FROM data_contract_issues")
     failing = contract[contract["severity"] != "PASS"]
+    held_back = rejection_summary(DEFAULT_DB_PATH)
     page_header(
         t("page.quality.title"),
         tr(
-            f"综合质量 {score:.1f}/100，数据契约发现 {len(failing)} 类问题。",
-            f"Overall quality is {score:.1f}/100, with {len(failing)} kinds of contract issue.",
+            f"综合质量 {score:.1f}/100，数据契约发现 {len(failing)} 类问题，"
+            f"{int(held_back['rows'].sum()):,} 行未计入分析。",
+            f"Overall quality is {score:.1f}/100, with {len(failing)} kinds of contract issue "
+            f"and {int(held_back['rows'].sum()):,} lines held out of analysis.",
         ),
         meta=trust_sentence(DEFAULT_DB_PATH),
     )
@@ -78,6 +90,7 @@ def render() -> None:
     tabs = st.tabs(
         [
             tr("契约问题", "Contract issues"),
+            tr("未计入的行", "Lines held back"),
             tr("指标可信度", "Metric trust"),
             tr("数据血缘", "Lineage"),
             tr("质量明细", "Quality detail"),
@@ -97,6 +110,27 @@ def render() -> None:
             )
         )
     with tabs[1]:
+        if held_back.empty:
+            verdict(tr("全部计入", "Nothing held back"), tr("所有行都进入了分析。", "Every line is in the analysis."), "good")
+        else:
+            st.dataframe(
+                rejection_table(held_back, warehouse_currency(DEFAULT_DB_PATH)), hide_index=True
+            )
+            st.download_button(
+                tr("下载这些行", "Download these lines"),
+                rejected_rows(DEFAULT_DB_PATH).to_csv(index=False).encode("utf-8-sig"),
+                file_name="insightflow_lines_held_back.csv",
+                mime="text/csv",
+            )
+            note(
+                tr(
+                    "这些行保留在仓库里备查，但不计入任何指标。非商品行不是错误：运费、手续费和调整不属于商品销售。",
+                    "These lines stay in the warehouse for audit but count toward no metric. "
+                    "Non-merchandise lines are not errors: postage, fees and adjustments are "
+                    "simply not sales of goods.",
+                )
+            )
+    with tabs[2]:
         trust = metric_trust_table(DEFAULT_DB_PATH)
         st.dataframe(
             trust,
@@ -112,14 +146,14 @@ def render() -> None:
                 "several sources read as Mixed.",
             )
         )
-    with tabs[2]:
-        show(lineage_sankey(data_lineage(DEFAULT_DB_PATH)), key="quality_lineage")
     with tabs[3]:
-        st.dataframe(quality_summary(DEFAULT_DB_PATH), hide_index=True)
+        show(lineage_sankey(data_lineage(DEFAULT_DB_PATH)), key="quality_lineage")
     with tabs[4]:
+        st.dataframe(quality_summary(DEFAULT_DB_PATH), hide_index=True)
+    with tabs[5]:
         runs = query_df(DEFAULT_DB_PATH, "SELECT * FROM etl_runs ORDER BY run_at DESC LIMIT 50")
         st.dataframe(runs, hide_index=True)
-    with tabs[5]:
+    with tabs[6]:
         subhead(tr("验证质量体系能否发现问题", "Prove the checks catch real problems"))
         note(
             tr(

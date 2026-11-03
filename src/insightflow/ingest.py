@@ -156,20 +156,26 @@ def read_delimited(content: bytes) -> pd.DataFrame:
 
 
 def read_excel_best_sheet(source) -> pd.DataFrame:
-    """Pick the sheet that looks most like a transaction ledger."""
+    """Read the ledger from a workbook, joining sheets that share its layout.
+
+    Exports often split one ledger across sheets by year, so stopping at the first match
+    would silently lose data. A sheet literally named transactions always wins, and
+    sheets with a different layout, such as dictionaries, are left out.
+    """
     workbook = pd.ExcelFile(source)
-    names = sorted(
-        workbook.sheet_names,
-        key=lambda name: (name.strip().lower() != "transactions", workbook.sheet_names.index(name)),
-    )
-    best: str | None = None
-    best_score = -1
-    for name in names:
-        preview = pd.read_excel(workbook, sheet_name=name, nrows=5)
-        score = sum(canonical_field(column) in REQUIRED_FIELDS for column in preview.columns)
-        if score > best_score:
-            best, best_score = name, score
-    return pd.read_excel(workbook, sheet_name=best)
+    for name in workbook.sheet_names:
+        if name.strip().lower() == "transactions":
+            return pd.read_excel(workbook, sheet_name=name)
+    previews = {name: pd.read_excel(workbook, sheet_name=name, nrows=5) for name in workbook.sheet_names}
+
+    def score(name: str) -> int:
+        return sum(canonical_field(column) in REQUIRED_FIELDS for column in previews[name].columns)
+
+    best = max(workbook.sheet_names, key=score)
+    layout = list(previews[best].columns)
+    same = [name for name in workbook.sheet_names if list(previews[name].columns) == layout]
+    frames = [pd.read_excel(workbook, sheet_name=name) for name in same]
+    return pd.concat(frames, ignore_index=True)
 
 
 def read_table(source: str | Path | bytes, name: str | None = None) -> pd.DataFrame:
@@ -196,31 +202,34 @@ def read_table(source: str | Path | bytes, name: str | None = None) -> pd.DataFr
     raise ValueError(f"不支持的数据格式: {suffix}")
 
 
-_NUMBER_NOISE = re.compile(r"[^0-9.,\-+eE%()]")
+_NUMERIC_TOKEN = re.compile(r"[-+]?\d[\d.,]*(?:[eE][-+]?\d+)?")
 
 
 def _parse_number_text(text: str) -> float:
-    value = _NUMBER_NOISE.sub("", text)
-    if not value:
+    value = unicodedata.normalize("NFKC", text).replace("\u2212", "-").strip()
+    match = _NUMERIC_TOKEN.search(value)
+    if match is None:
         return np.nan
-    negative = value.startswith("(") and value.endswith(")")
-    percent = "%" in value
-    value = value.strip("()").replace("%", "")
-    if "," in value and "." in value:
+    token = match.group()
+    # Accounting exports write negatives as (12.00) or 12.00-.
+    negative = (value.startswith("(") and value.endswith(")")) or value.endswith("-")
+    if "," in token and "." in token:
         # The right-most separator is the decimal mark: 1.299,50 versus 1,299.50.
-        if value.rfind(",") > value.rfind("."):
-            value = value.replace(".", "").replace(",", ".")
+        if token.rfind(",") > token.rfind("."):
+            token = token.replace(".", "").replace(",", ".")
         else:
-            value = value.replace(",", "")
-    elif "," in value:
-        head, _, tail = value.rpartition(",")
-        value = value.replace(",", "") if len(tail) == 3 and head else value.replace(",", ".")
+            token = token.replace(",", "")
+    elif "," in token:
+        head, _, tail = token.rpartition(",")
+        token = token.replace(",", "") if len(tail) == 3 and head else token.replace(",", ".")
+    elif token.count(".") > 1:
+        token = token.replace(".", "")
     try:
-        number = float(value)
+        number = float(token)
     except ValueError:
         return np.nan
-    number = -number if negative else number
-    return number / 100 if percent else number
+    number = -abs(number) if negative else number
+    return number / 100 if "%" in value else number
 
 
 def parse_number(series: pd.Series) -> pd.Series:
@@ -228,8 +237,14 @@ def parse_number(series: pd.Series) -> pd.Series:
     if pd.api.types.is_numeric_dtype(series):
         return pd.to_numeric(series, errors="coerce")
     text = series.astype("string").str.strip()
-    parsed = text.map(lambda item: np.nan if pd.isna(item) else _parse_number_text(str(item)))
-    return pd.to_numeric(parsed, errors="coerce")
+    # Plain numbers take the fast path, so only messy cells pay for the slower parser.
+    parsed = pd.to_numeric(text, errors="coerce").astype("float64")
+    messy = parsed.isna() & text.notna()
+    if messy.any():
+        unique = text[messy].drop_duplicates()
+        lookup = {str(item): _parse_number_text(str(item)) for item in unique}
+        parsed.loc[messy] = text[messy].map(lookup).astype("float64")
+    return parsed
 
 
 def parse_rate(series: pd.Series) -> pd.Series:
@@ -241,15 +256,31 @@ def parse_rate(series: pd.Series) -> pd.Series:
     return numeric
 
 
+def _parse_numeric_dates(numeric: pd.Series) -> pd.Series:
+    """Read the numeric forms exports use: Excel serials, 20250301, and Unix timestamps."""
+    out = pd.Series(pd.NaT, index=numeric.index, dtype="datetime64[ns]")
+    serial = numeric.between(20000, 80000)
+    compact = numeric.between(19000101, 21001231)
+    seconds = numeric.between(1e9, 4e9)
+    milliseconds = numeric.between(1e12, 4e12)
+    if serial.any():
+        out.loc[serial] = pd.to_datetime(numeric[serial], unit="D", origin="1899-12-30")
+    if compact.any():
+        text = numeric[compact].astype("int64").astype("string")
+        out.loc[compact] = pd.to_datetime(text, format="%Y%m%d", errors="coerce")
+    if seconds.any():
+        out.loc[seconds] = pd.to_datetime(numeric[seconds], unit="s")
+    if milliseconds.any():
+        out.loc[milliseconds] = pd.to_datetime(numeric[milliseconds], unit="ms")
+    return out
+
+
 def parse_datetime(series: pd.Series) -> pd.Series:
     """Parse ISO text, Chinese dates and Excel serial numbers into timestamps."""
     if pd.api.types.is_datetime64_any_dtype(series):
         return series
     if pd.api.types.is_numeric_dtype(series):
-        numeric = pd.to_numeric(series, errors="coerce")
-        serial = numeric.between(20000, 80000)
-        out = pd.to_datetime(numeric.where(serial), unit="D", origin="1899-12-30", errors="coerce")
-        return out
+        return _parse_numeric_dates(pd.to_numeric(series, errors="coerce"))
     text = series.astype("string").str.strip()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)

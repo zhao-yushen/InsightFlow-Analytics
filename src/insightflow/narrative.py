@@ -11,7 +11,8 @@ from typing import Any
 import pandas as pd
 
 from .currency import money, symbol
-from .i18n import tr
+from .data_contracts import REJECTION_LABELS
+from .i18n import base_period, tr
 
 LEAK_LABELS = (
     ("discount_amount", "折扣", "Discounts"),
@@ -40,16 +41,16 @@ def overview_story(
     margin = f"{current['contribution_margin']:.1%}"
     if not comparable or not previous["revenue"]:
         return tr(
-            f"本期净销售额 {revenue}，贡献利润率 {margin}。上一周期样本不足，暂不比较。",
+            f"本期净销售额 {revenue}，贡献利润率 {margin}。{base_period()}样本不足，暂不比较。",
             f"Net revenue is {revenue} at a {margin} contribution margin. "
-            "The prior period has too few orders to compare.",
+            f"There are too few orders in {base_period()} to compare.",
         )
     change = current["revenue"] - previous["revenue"]
     rate = change / abs(previous["revenue"])
     gap = money(abs(change), code, short=True)
     opening = tr(
-        f"净销售额 {revenue}，比上期{_direction(change)} {gap}（{rate:+.1%}）。",
-        f"Net revenue is {revenue}, {_direction(change)} {gap} ({rate:+.1%}) on the prior period.",
+        f"净销售额 {revenue}，比{base_period()}{_direction(change)} {gap}（{rate:+.1%}）。",
+        f"Net revenue is {revenue}, {_direction(change)} {gap} ({rate:+.1%}) on {base_period()}.",
     )
     if bridge is None or bridge.empty:
         return opening + tr(f"贡献利润率 {margin}。", f" Contribution margin is {margin}.")
@@ -70,7 +71,12 @@ def overview_story(
 
 
 def river_payload(
-    current: dict[str, float], previous: dict[str, float], code: str, *, comparable: bool = True
+    current: dict[str, float],
+    previous: dict[str, float],
+    code: str,
+    *,
+    comparable: bool = True,
+    picked: str | None = None,
 ) -> dict[str, Any]:
     """Describe the money river: where sales start, what leaves, and what stays."""
     gross = max(current["gross_revenue"], 1.0)
@@ -78,6 +84,9 @@ def river_payload(
     for key, chinese, english in LEAK_LABELS:
         value = float(current[key])
         before = float(previous.get(key, 0))
+        if abs(value) < 0.5 and abs(before) < 0.5:
+            # A ledger with no discounts has nothing to show on that branch, in either period.
+            continue
         share_of_gross = value / gross
         prior_share = before / max(previous.get("gross_revenue", 0), 1.0)
         change = (share_of_gross - prior_share) * 100
@@ -89,9 +98,12 @@ def river_payload(
                 "display": money(value, code, short=True),
                 "share": tr(f"占毛额 {share_of_gross:.1%}", f"{share_of_gross:.1%} of gross"),
                 "delta": (
-                    tr(f"占比较上期 {change:+.1f} 个百分点", f"{change:+.1f} pts vs prior")
+                    tr(
+                        f"占比较{base_period()} {change:+.1f} 个百分点",
+                        f"{change:+.1f} pts on {base_period()}",
+                    )
                     if comparable
-                    else tr("上期样本不足", "Prior period too small")
+                    else tr(f"{base_period()}样本不足", f"Too few orders in {base_period()}")
                 ),
             }
         )
@@ -103,6 +115,8 @@ def river_payload(
             "display": money(current["gross_revenue"], code, short=True),
         },
         "leaks": leaks,
+        "picked": picked,
+        "pickHint": tr("按回车查看来源", "Press Enter to see where it comes from"),
         "end": {
             "label": tr("贡献利润", "Contribution profit"),
             "value": end,
@@ -135,6 +149,19 @@ def river_table(current: dict[str, float], code: str) -> pd.DataFrame:
     amount = tr(f"金额（{code}）", f"Amount ({code})")
     share = tr("占毛额", "Share of gross")
     return pd.DataFrame(rows, columns=[label, amount, share]).round({amount: 0, share: 4})
+
+
+def rejection_table(summary: pd.DataFrame, code: str) -> pd.DataFrame:
+    """Say in plain words which lines were held back and what they were worth."""
+    return pd.DataFrame(
+        {
+            tr("原因", "Reason"): [
+                tr(*REJECTION_LABELS.get(reason, (reason, reason))) for reason in summary["reason"]
+            ],
+            tr("行数", "Rows"): summary["rows"].astype(int).to_numpy(),
+            tr(f"金额（{code}）", f"Amount ({code})"): summary["amount"].round(0).to_numpy(),
+        }
+    )
 
 
 TARGET_LABELS = {

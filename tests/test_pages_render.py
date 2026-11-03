@@ -10,6 +10,7 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 from insightflow import cli, config, ui
+from insightflow.backup import list_backups
 from insightflow.etl import clean_transactions
 from insightflow.experiments import experiment_catalog
 from insightflow.i18n import ZH
@@ -74,10 +75,41 @@ def test_messy_upload_passes_precheck_and_imports(page_warehouse: Path) -> None:
     app = AppTest.from_string(script, default_timeout=120).run()
     assert not app.exception, [str(item.value) for item in app.exception]
     assert not app.error, [item.value for item in app.error]
+    assert app.toggle(key="import_replace").value is True
+    app = app.toggle(key="import_replace").set_value(False).run()
     importer = next(button for button in app.button if button.label == "确认导入")
     assert not importer.disabled
     app = importer.click().run()
     assert not app.exception, [str(item.value) for item in app.exception]
+
+
+def test_problem_rows_wait_for_a_decision_and_a_backup_comes_first(page_warehouse: Path) -> None:
+    rows = ["订单号,商品编码,商品名称,数量,单价,下单时间,国家"]
+    rows += [f"D-{index},S-1,保温杯,1,10,2025-12-0{index % 9 + 1},中国" for index in range(12)]
+    rows.append("D-99,S-2,破损,1,0,2025-12-01,中国")
+    script = _upload_script("\n".join(rows).encode(), "mixed.csv")
+    app = AppTest.from_string(script, default_timeout=120).run()
+    assert not app.exception, [str(item.value) for item in app.exception]
+    importer = next(button for button in app.button if button.label == "确认导入")
+    assert importer.disabled
+    app = app.toggle(key="import_replace").set_value(False).run()
+    app = app.checkbox(key="import_isolate").check().run()
+    importer = next(button for button in app.button if button.label == "确认导入")
+    assert not importer.disabled
+    before = {path.name for path in list_backups(page_warehouse)}
+    app = importer.click().run()
+    assert not app.exception, [str(item.value) for item in app.exception]
+    assert {path.name for path in list_backups(page_warehouse)} - before
+
+
+def test_a_file_that_is_mostly_broken_cannot_be_imported(page_warehouse: Path) -> None:
+    rows = ["订单号,商品编码,商品名称,数量,单价,下单时间,国家"]
+    rows += [f"D-{index},S-1,保温杯,1,0,2025-12-01,中国" for index in range(10)]
+    script = _upload_script("\n".join(rows).encode(), "broken.csv")
+    app = AppTest.from_string(script, default_timeout=120).run()
+    assert not app.exception
+    importer = next(button for button in app.button if button.label == "确认导入")
+    assert importer.disabled
 
 
 def test_unreadable_mapping_names_what_is_missing(page_warehouse: Path) -> None:

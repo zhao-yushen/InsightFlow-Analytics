@@ -1,19 +1,29 @@
 """Price response estimated from the ledger itself, not assumed.
 
 Each category gets a Poisson regression of weekly order counts on net price, with an
-effect for every product and every week, so seasonal peaks and permanently popular
-products cannot pass for price effects. Two choices matter:
+effect for every product stream and every week, so seasonal peaks and permanently popular
+products cannot pass for price effects. Four choices matter:
 
 - Order counts and a plain average of each line's net price replace units and revenue
   per unit. A wholesale order is both huge and heavily discounted, so quantity-weighted
   prices manufacture a steep "cheap means more sold" slope that is really channel mix.
   On the demo ledger that bias nearly doubled the estimate.
+- Each product is followed separately in every sales stream: its channel, and whether
+  the buyer is known. Streams often sit on different price lists, so pooling them turns
+  a shift between streams into a false price change. On the UCI ledger anonymous web
+  orders pay about twice the account price, and pooling flattened -0.60 to -0.16.
+- A stream with no sale in a week takes its usual price times the product's price index
+  that week, read from the streams that did sell. Promotions move every stream at once,
+  and the usual price alone records quiet promotion weeks as full price with no orders,
+  which pushed the demo estimates a full point too steep.
 - The Poisson form keeps weeks with no sale. Taking logs would drop them and flatten
   the slope, because low-demand weeks disappear from the sample.
 
-The result is then shrunk toward the category prior in proportion to its uncertainty:
-thin or flat-priced data stays close to the prior, rich data speaks for itself, and
-every output states which of the two carried it.
+Errors are clustered by product, since one product's weeks are not independent draws;
+on real data that widens them three to five times. The result is then shrunk toward
+the category prior in proportion to its uncertainty: thin or flat-priced data stays
+close to the prior, rich data speaks for itself, and every output states which of the
+two carried it.
 """
 
 from __future__ import annotations
@@ -32,6 +42,8 @@ MIN_ORDERS = 150
 MIN_PRICE_VARIATION = 0.004
 MAX_ITERATIONS = 40
 SCALE_PASSES = 6
+MAX_UNITS = 8000
+Z_95 = 1.96
 
 
 def weekly_price_panel(db_path: str | Path, filters: FilterSpec) -> pd.DataFrame:
@@ -39,14 +51,16 @@ def weekly_price_panel(db_path: str | Path, filters: FilterSpec) -> pd.DataFrame
     return query_df(
         db_path,
         f"""
-        SELECT category, stock_code, STRFTIME('%Y-%W', date) AS week,
+        SELECT category, stock_code,
+               channel || CASE WHEN customer_id IS NULL THEN ' anonymous' ELSE '' END AS stream,
+               STRFTIME('%Y-%W', date) AS week,
                COUNT(DISTINCT invoice_no) AS orders,
                AVG(unit_price * (1 - discount_rate)) AS net_price,
                SUM(net_revenue) AS revenue,
                AVG(price_elasticity) AS prior_elasticity
         FROM v_sales
         WHERE {where}
-        GROUP BY category, stock_code, week
+        GROUP BY category, stock_code, stream, week
         HAVING net_price > 0
         """,
         params,
@@ -54,15 +68,27 @@ def weekly_price_panel(db_path: str | Path, filters: FilterSpec) -> pd.DataFrame
 
 
 def _poisson_slope(group: pd.DataFrame) -> tuple[float, float] | None:
-    """Fit orders ~ product + week + log price and return the slope with a robust error."""
-    orders = group.pivot_table(
-        index="stock_code", columns="week", values="orders", aggfunc="sum"
-    ).fillna(0.0)
-    prices = group.pivot_table(index="stock_code", columns="week", values="net_price", aggfunc="mean")
-    # A week without a sale shows no price, so the product's usual price stands in.
-    prices = prices.apply(lambda column: column.fillna(prices.median(axis=1)))
+    """Fit orders ~ product stream + week + log price and return the slope and its error."""
+    keys = ["stock_code", "stream"]
+    busiest = group.groupby(keys)["orders"].sum().nlargest(MAX_UNITS)
+    if len(busiest) == MAX_UNITS:
+        group = group.merge(busiest.index.to_frame(index=False), on=keys)
+    orders = group.pivot_table(index=keys, columns="week", values="orders", aggfunc="sum").fillna(0.0)
+    prices = group.pivot_table(index=keys, columns="week", values="net_price", aggfunc="mean")
+    seen = prices.reindex(index=orders.index, columns=orders.columns).to_numpy(float)
+    products = pd.factorize(orders.index.get_level_values("stock_code"))[0]
+    # A week without a sale shows no price. Promotions and list changes move a product in
+    # every stream at once, so the week's price index, read from the streams that did sell,
+    # is applied to this stream's usual price. Using the usual price alone would turn every
+    # quiet promotion week into "full price, no orders" and steepen the slope.
+    usual = np.nanmedian(seen, axis=1, keepdims=True)
+    codes = orders.index.get_level_values("stock_code")
+    index = pd.DataFrame(seen / usual, index=codes).groupby(level=0).mean()
+    weekly_index = index.reindex(codes).to_numpy(float)
+    filled = np.where(np.isnan(seen), usual * weekly_index, seen)
+    filled = np.where(np.isnan(filled), usual, filled)
     y = orders.to_numpy(float)
-    log_price = np.log(prices.to_numpy(float))
+    log_price = np.log(filled)
     log_price = log_price - log_price.mean(axis=1, keepdims=True)
     if float(log_price.std()) < MIN_PRICE_VARIATION:
         return None
@@ -97,8 +123,16 @@ def _poisson_slope(group: pd.DataFrame) -> tuple[float, float] | None:
             break
     curvature = float((mean * within**2).sum())
     # Sandwich error: orders vary more than a pure Poisson process would.
-    spread = float((((y - mean) * within) ** 2).sum())
-    return beta, float(np.sqrt(spread) / curvature)
+    score = (y - mean) * within
+    independent = float(np.sqrt((score**2).sum()) / curvature)
+    clusters = int(products.max()) + 1
+    if clusters < 2:
+        return beta, independent
+    by_product = np.bincount(products, weights=score.sum(axis=1), minlength=clusters)
+    correction = clusters / (clusters - 1)
+    clustered = float(np.sqrt(correction * (by_product**2).sum()) / curvature)
+    # With few products the clustered form is itself unreliable, so it may only widen.
+    return beta, max(clustered, independent)
 
 
 def _estimate(db_path: str, filters: FilterSpec) -> pd.DataFrame:
@@ -111,6 +145,7 @@ def _estimate(db_path: str, filters: FilterSpec) -> pd.DataFrame:
         "prior",
         "elasticity",
         "data_weight",
+        "posterior_sd",
         "basis",
         "revenue",
     ]
@@ -132,6 +167,7 @@ def _estimate(db_path: str, filters: FilterSpec) -> pd.DataFrame:
                     "prior": prior,
                     "elasticity": prior,
                     "data_weight": 0.0,
+                    "posterior_sd": PRIOR_SD,
                     "basis": "prior",
                     "revenue": revenue,
                 }
@@ -150,6 +186,7 @@ def _estimate(db_path: str, filters: FilterSpec) -> pd.DataFrame:
                 "prior": prior,
                 "elasticity": weight * estimate + (1 - weight) * prior,
                 "data_weight": weight,
+                "posterior_sd": float(np.sqrt(1 / (data_precision + prior_precision))),
                 "basis": "data" if weight >= 0.5 else "prior",
                 "revenue": revenue,
             }
@@ -181,6 +218,11 @@ def blended_elasticity(
     return float(np.average(table["elasticity"], weights=table["revenue"]))
 
 
+def _margin_change(units, price, cost, move, elasticity):
+    """Change in contribution when price moves and demand answers at constant elasticity."""
+    return units * (1 + move) ** elasticity * (price * (1 + move) - cost) - units * (price - cost)
+
+
 def category_price_moves(
     db_path: str | Path,
     filters: FilterSpec,
@@ -191,7 +233,10 @@ def category_price_moves(
 
     For elasticity e below -1 the optimal price is c × e / (1 + e), where c is the unit
     variable cost. Moves are capped at ±max_move because the model is only trustworthy
-    close to prices the business has actually charged.
+    close to prices the business has actually charged. At or above -1 the formula has no
+    finite answer and the move simply rides the cap, which is why every move also carries
+    its profit at both ends of the elasticity's 95% interval. `robust` is true only when
+    even the unfavourable end still gains.
     """
     where, params = filter_clause(filters)
     economics = query_df(
@@ -212,7 +257,7 @@ def category_price_moves(
     if economics.empty or table.empty:
         return pd.DataFrame()
     merged = economics.merge(
-        table[["category", "elasticity", "basis", "data_weight"]], on="category"
+        table[["category", "elasticity", "posterior_sd", "basis", "data_weight"]], on="category"
     )
     price = merged["revenue"] / merged["units"]
     unit_cost = merged["variable_cost"] / merged["units"]
@@ -224,14 +269,23 @@ def category_price_moves(
         price * (1 + max_move),
     )
     move = np.clip(optimal / price - 1, -max_move, max_move)
-    new_price = price * (1 + move)
     new_units = merged["units"] * (1 + move) ** elasticity
-    current_margin = merged["units"] * (price - unit_cost)
-    new_margin = new_units * (new_price - unit_cost)
+    spread = Z_95 * merged["posterior_sd"].to_numpy()
+    ends = np.array(
+        [
+            _margin_change(merged["units"], price, unit_cost, move, elasticity + side * spread)
+            for side in (-1, 1)
+        ]
+    )
     merged["current_price"] = price
     merged["unit_variable_cost"] = unit_cost
     merged["recommended_move"] = move
-    merged["expected_profit_change"] = new_margin - current_margin
-    merged["expected_revenue_change"] = new_units * new_price - merged["revenue"]
+    merged["expected_profit_change"] = _margin_change(
+        merged["units"], price, unit_cost, move, elasticity
+    )
+    merged["profit_change_low"] = ends.min(axis=0)
+    merged["profit_change_high"] = ends.max(axis=0)
+    merged["robust"] = merged["profit_change_low"] > 0
+    merged["expected_revenue_change"] = new_units * price * (1 + move) - merged["revenue"]
     merged["capped"] = np.abs(optimal / price - 1) > max_move
     return merged.sort_values("expected_profit_change", ascending=False).reset_index(drop=True)

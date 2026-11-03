@@ -25,7 +25,8 @@
       "nullable": false
     },
     "description": {
-      "nullable": false
+      "nullable": false,
+      "severity": "P2"
     },
     "quantity": {
       "nullable": false,
@@ -42,7 +43,7 @@
     },
     "discount_rate": {
       "min": 0,
-      "max": 0.35
+      "max": 0.9
     },
     "unit_cost": {
       "min_exclusive": 0

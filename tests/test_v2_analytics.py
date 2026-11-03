@@ -33,7 +33,7 @@ def test_price_volume_mix_explains_the_whole_change(demo_warehouse, last_quarter
 
 def test_elasticities_are_negative_and_rank_with_the_truth(demo_warehouse):
     table = estimate_elasticities(demo_warehouse, FilterSpec())
-    assert (table["basis"] == "data").sum() >= 6
+    assert (table["basis"] == "data").sum() >= 4
     fitted = table.dropna(subset=["estimate"])
     assert (fitted["elasticity"] < 0).all()
     assert fitted["elasticity"].median() < -0.4

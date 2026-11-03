@@ -105,20 +105,22 @@ def test_appending_clean_rows_cannot_relabel_a_simulated_warehouse(demo_warehous
     assert quality_score(db) == pytest.approx(before_score, abs=0.5)
 
 
-def test_estimated_discount_keeps_net_revenue_from_reading_as_verified(tmp_path):
+def test_a_ledger_without_discounts_reconciles_to_its_source(tmp_path):
     frame = pd.DataFrame([_line(str(i)) for i in range(20)])
     result = clean_transactions(frame, source_profile="uci_online_retail")
     db = tmp_path / "uci.db"
     build_warehouse(result, db)
+    kpi = kpi_summary(db, FilterSpec())
+    assert kpi["revenue"] == pytest.approx((frame["quantity"] * frame["unit_price"]).sum())
+    assert kpi["discount_amount"] == 0
     status = query_df(db, "SELECT data_status, confidence FROM metric_catalog WHERE metric_id='net_revenue'")
-    assert status.iloc[0]["data_status"] == "Estimated"
-    assert status.iloc[0]["confidence"] < 0.95
-    orders = query_df(db, "SELECT data_status FROM metric_catalog WHERE metric_id='orders'")
-    assert orders.iloc[0]["data_status"] == "Verified"
+    assert status.iloc[0]["data_status"] == "Verified"
+    profit = query_df(db, "SELECT data_status FROM metric_catalog WHERE metric_id='gross_profit'")
+    assert profit.iloc[0]["data_status"] == "Estimated"
 
 
 def test_contract_sees_values_before_they_are_clipped():
-    frame = pd.DataFrame([_line("1", discount_rate=0.9), _line("2", unit_cost=-5.0)])
+    frame = pd.DataFrame([_line("1", discount_rate=0.95), _line("2", unit_cost=-5.0)])
     result = clean_transactions(frame, transaction_status="Verified")
     rules = set(zip(result.contract_issues["rule_id"], result.contract_issues["column"], strict=True))
     assert ("max_value", "discount_rate") in rules

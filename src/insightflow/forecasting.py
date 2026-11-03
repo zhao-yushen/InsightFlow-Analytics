@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import calendar
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from .metrics import FilterSpec, monthly_trend
-from .warehouse import query_df
+from .metrics import FilterSpec, monthly_trend, partial_month
 
 SEASON = 12
 RATIO_METRICS = {"gross_margin", "contribution_margin", "discount_rate", "cancellation_rate"}
@@ -201,17 +199,18 @@ def _candidate_models(length: int) -> list[str]:
     return models
 
 
+def _continuous_months(history: pd.DataFrame, metric: str) -> pd.DataFrame:
+    """Fill calendar gaps. A small market with an empty month sold nothing that month."""
+    months = pd.period_range(history["month"].iloc[0], history["month"].iloc[-1], freq="M")
+    series = history.set_index(pd.PeriodIndex(history["month"], freq="M"))[metric].reindex(months)
+    filled = series.ffill() if metric in RATIO_METRICS else series.fillna(0.0)
+    return pd.DataFrame({"month": months.strftime("%Y-%m"), metric: filled.to_numpy()})
+
+
 def _complete_history(db_path: str | Path, history: pd.DataFrame) -> tuple[pd.DataFrame, str | None]:
     """Drop a final month the data has not finished, which would read as a collapse."""
     last_month = str(history.iloc[-1]["month"])
-    last_date = query_df(
-        db_path, "SELECT MAX(date) AS d FROM v_sales WHERE month = ?", (last_month,)
-    ).iloc[0, 0]
-    if last_date is None:
-        return history, None
-    stamp = pd.Timestamp(last_date)
-    month_days = calendar.monthrange(stamp.year, stamp.month)[1]
-    if stamp.day <= month_days - 3 and len(history) > 6:
+    if last_month == partial_month(db_path) and len(history) > 6:
         return history.iloc[:-1].copy(), last_month
     return history, None
 
@@ -229,6 +228,7 @@ def forecast_metric(
     history = trend[["month", metric]].dropna().copy()
     if len(history) < 6:
         raise ValueError("至少需要6个月数据才能进行模型比较")
+    history = _continuous_months(history, metric)
     history, dropped = _complete_history(db_path, history)
     values = history[metric].astype(float).to_numpy()
 

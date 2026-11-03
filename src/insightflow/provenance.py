@@ -10,6 +10,7 @@ STATUS_LABELS = {
     "Verified": "真实/已核验",
     "Estimated": "估算",
     "Simulated": "模拟",
+    "Missing": "未提供",
     "Mixed": "混合",
 }
 
@@ -22,7 +23,7 @@ def dataset_profile(db_path: str | Path) -> dict[str, str | float]:
             "data_mode": "Mixed",
             "transaction_status": "Verified",
             "economic_status": "Estimated",
-            "inventory_status": "Simulated",
+            "inventory_status": "Missing",
             "source_note": "旧仓库未记录完整来源标签",
         }
     frame = query_df(db_path, "SELECT * FROM data_profiles ORDER BY created_at DESC LIMIT 1")

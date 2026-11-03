@@ -8,7 +8,12 @@ from insightflow.currency import money, symbol
 from insightflow.design import SERIES
 from insightflow.i18n import t, tr
 from insightflow.live import gauge_strip
-from insightflow.metrics import cohort_retention, customer_value_risk, rfm_segments
+from insightflow.metrics import (
+    cohort_retention,
+    customer_coverage,
+    customer_value_risk,
+    rfm_segments,
+)
 from insightflow.ui import (
     currency_code,
     gauge_item,
@@ -91,6 +96,15 @@ def render() -> None:
         ],
         key="customer_gauges",
     )
+    coverage = customer_coverage(DEFAULT_DB_PATH, filters)
+    if coverage < 0.95:
+        note(
+            tr(
+                f"这里只分析带客户编号的订单，占净销售额 {coverage:.0%}。其余是匿名订单，不在客户分析内。",
+                f"Only orders with a customer ID are analysed here, {coverage:.0%} of net revenue. "
+                "The rest are anonymous and fall outside customer analysis.",
+            )
+        )
 
     section_header(tr("客户分层", "Customer segments"), tr("按最近购买、频次和金额", "By recency, frequency and value"))
     segments = (
@@ -183,9 +197,10 @@ def render() -> None:
             note(
                 tr(
                     f"训练客户 {model.train_customers:,} 位，验证客户 {model.test_customers:,} 位，"
-                    "点越靠近对角线，预测概率越可信。",
+                    "点越靠近对角线，预测概率越可信。验证通过后，模型用最新一期数据重训再给客户打分。",
                     f"{model.train_customers:,} training and {model.test_customers:,} test customers. "
-                    "Points near the diagonal mean the probabilities can be read literally.",
+                    "Points near the diagonal mean the probabilities can be read literally. After "
+                    "validation the model is refit on the newest window before scoring customers.",
                 )
             )
 

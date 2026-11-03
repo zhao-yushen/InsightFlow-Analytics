@@ -36,12 +36,15 @@ def render() -> None:
     filters = sidebar_filters(DEFAULT_DB_PATH)
     code = currency_code()
     kpi = kpi_summary(DEFAULT_DB_PATH, filters)
+    language = current_language()
     issues, drivers = generate_diagnostics(DEFAULT_DB_PATH, filters)
     trend = monthly_trend(DEFAULT_DB_PATH, filters.undated())
     period = f"{filters.start_date} {tr('至', 'to')} {filters.end_date}"
     summary, engine = executive_summary(
-        generate_diagnostics(DEFAULT_DB_PATH, filters, language=current_language())[0],
-        current_language(),
+        issues
+        if language == "zh-CN"
+        else generate_diagnostics(DEFAULT_DB_PATH, filters, language=language)[0],
+        language,
     )
     month = str(pd.Timestamp(filters.end_date).to_period("M"))
     targets = target_status(DEFAULT_DB_PATH, month)

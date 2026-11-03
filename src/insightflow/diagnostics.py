@@ -15,11 +15,13 @@ from .metrics import (
     inventory_kpis,
     kpi_summary,
     monthly_trend,
+    partial_month,
     percent_change,
     previous_period,
     quality_score,
     target_status,
 )
+from .provenance import dataset_profile
 from .warehouse import query_df
 
 TARGET_LABELS = {
@@ -37,6 +39,14 @@ def _chooser(language: str):
         return chinese if language == "zh-CN" else english
 
     return say
+
+
+def base_name(filters: FilterSpec, language: str) -> str:
+    """Name the period being compared against, for running text."""
+    say = _chooser(language)
+    if filters.compare == "year":
+        return say("去年同期", "the same period last year")
+    return say("上期", "the prior period")
 
 
 @dataclass
@@ -116,8 +126,8 @@ def profit_driver_decomposition(
             "driver": say("净销售额变化", "Net revenue change"),
             "profit_contribution": (cur_revenue - prev_revenue) * prev_margin,
             "explanation": say(
-                "销售规模变化在上期毛利率下产生的利润影响",
-                "Profit effect of the change in sales at last period's gross margin",
+                "销售规模变化按基准期毛利率产生的利润影响",
+                "Profit effect of the change in sales at the base period's gross margin",
             ),
         },
         {
@@ -165,6 +175,7 @@ def dimension_change(
 
 def monthly_anomalies(db_path: str | Path, filters: FilterSpec | None = None) -> pd.DataFrame:
     trend = monthly_trend(db_path, filters or FilterSpec())
+    trend = trend[trend["month"] != partial_month(db_path)]
     if len(trend) < 6:
         return pd.DataFrame()
     out = trend.copy()
@@ -172,9 +183,10 @@ def monthly_anomalies(db_path: str | Path, filters: FilterSpec | None = None) ->
         if metric not in out:
             continue
         series = out[metric].astype(float)
-        rolling_median = series.rolling(6, min_periods=4).median()
-        mad = (series - rolling_median).abs().rolling(6, min_periods=4).median()
-        out[f"{metric}_robust_z"] = 0.6745 * (series - rolling_median) / mad.replace(0, np.nan)
+        # The baseline excludes the month being judged, so a spike cannot hide inside it.
+        baseline = series.shift(1).rolling(6, min_periods=4).median()
+        spread = (series.shift(1) - baseline).abs().rolling(6, min_periods=3).median()
+        out[f"{metric}_robust_z"] = 0.6745 * (series - baseline) / spread.replace(0, np.nan)
     z_cols = [c for c in out.columns if c.endswith("_robust_z")]
     if not z_cols:
         return pd.DataFrame()
@@ -187,6 +199,14 @@ def generate_diagnostics(
 ) -> tuple[list[DiagnosticIssue], pd.DataFrame]:
     say = _chooser(language)
     code = warehouse_currency(db_path)
+    basis = base_name(current, language)
+    # Rule-based costs say little about margins, so alarms on them must not read as findings.
+    costs_known = str(dataset_profile(db_path).get("economic_status")) in {"Verified", "Simulated"}
+    cost_caveat = (
+        ""
+        if costs_known
+        else say("成本来自估算规则，只能看方向。", " Costs are rule-based, so read this as direction only.")
+    )
 
     def amount(value: float) -> str:
         return money(float(value), code)
@@ -218,8 +238,8 @@ def generate_diagnostics(
                 category=say("经营结果", "Results"),
                 title=say("净销售额显著下降", "Net revenue fell sharply"),
                 finding=say(
-                    f"本期净销售额较上期下降 {abs(revenue_change):.1%}。",
-                    f"Net revenue fell {abs(revenue_change):.1%} on the prior period.",
+                    f"本期净销售额较{basis}下降 {abs(revenue_change):.1%}。",
+                    f"Net revenue fell {abs(revenue_change):.1%} on {basis}.",
                 ),
                 evidence=say(
                     f"最大负向驱动为{worst['driver']}，收入贡献约 {contribution}。",
@@ -243,8 +263,8 @@ def generate_diagnostics(
                 category=say("增长机会", "Growth"),
                 title=say("净销售额实现较快增长", "Net revenue grew quickly"),
                 finding=say(
-                    f"本期净销售额较上期增长 {revenue_change:.1%}。",
-                    f"Net revenue grew {revenue_change:.1%} on the prior period.",
+                    f"本期净销售额较{basis}增长 {revenue_change:.1%}。",
+                    f"Net revenue grew {revenue_change:.1%} on {basis}.",
                 ),
                 evidence=say(
                     f"最大正向驱动为{best['driver']}，收入贡献约 {contribution}。",
@@ -264,31 +284,34 @@ def generate_diagnostics(
         worst_profit = profit_drivers.iloc[0]
         severity = "P0" if (revenue_change or 0) >= 0 else "P1"
         impact = amount(worst_profit["profit_contribution"])
+        if not costs_known:
+            severity = "P2"
         issues.append(
             DiagnosticIssue(
                 severity=severity,
                 category=say("盈利能力", "Profitability"),
                 title=say("贡献利润显著承压", "Contribution profit under pressure"),
                 finding=say(
-                    f"本期贡献利润较上期下降 {abs(profit_change):.1%}，"
+                    f"本期贡献利润较{basis}下降 {abs(profit_change):.1%}，"
                     f"贡献利润率为 {cur['contribution_margin']:.1%}。",
                     f"Contribution profit fell {abs(profit_change):.1%}, to a "
                     f"{cur['contribution_margin']:.1%} margin.",
                 ),
                 evidence=say(
-                    f"最大负向因素为{worst_profit['driver']}，影响约 {impact}。",
-                    f"The largest negative factor was {worst_profit['driver']}, about {impact}.",
+                    f"最大负向因素为{worst_profit['driver']}，影响约 {impact}。{cost_caveat}",
+                    f"The largest negative factor was {worst_profit['driver']}, about {impact}."
+                    f"{cost_caveat}",
                 ),
                 recommendation=say(
                     "优先检查折扣、商品成本、物流与营销费用，避免只追求收入增长。",
                     "Check discounts, product cost, shipping and marketing first, rather than "
                     "chasing revenue alone.",
                 ),
-                confidence=0.97,
+                confidence=0.97 if costs_known else 0.70,
                 code="profit_pressure",
             )
         )
-    if cur["gross_margin"] < 0.38:
+    if costs_known and cur["gross_margin"] < 0.38:
         cost_share = cur["cogs"] / max(cur["revenue"], 1)
         issues.append(
             DiagnosticIssue(
@@ -325,9 +348,9 @@ def generate_diagnostics(
                 title=say("退货取消率偏高或快速上升", "Return rate high or rising fast"),
                 finding=say(
                     f"本期退货取消率为 {cur['cancellation_rate']:.1%}，"
-                    f"较上期变化 {cancel_change * 100:+.1f} 个百分点。",
+                    f"较{basis}变化 {cancel_change * 100:+.1f} 个百分点。",
                     f"The return rate is {cur['cancellation_rate']:.1%}, "
-                    f"{cancel_change * 100:+.1f} pts on the prior period.",
+                    f"{cancel_change * 100:+.1f} pts on {basis}.",
                 ),
                 evidence=say(
                     f"退货退款 {amount(cur['returns_value'])}，"
@@ -450,6 +473,8 @@ def generate_diagnostics(
     )
     if not target.empty:
         off_track = target[target["status"] == "Off Track"]
+        if not costs_known:
+            off_track = off_track[off_track["metric_id"] != "gross_margin"]
         if not off_track.empty:
             metric = off_track.sort_values("attainment").iloc[0]
             metric_id = str(metric["metric_id"])
@@ -459,7 +484,7 @@ def generate_diagnostics(
             goal = f"{metric['target_value']:.1%}" if rate else amount(metric["target_value"])
             issues.append(
                 DiagnosticIssue(
-                    severity="P1",
+                    severity="P2",
                     category=say("目标管理", "Targets"),
                     title=say("关键经营目标明显偏离", "A key target is far off track"),
                     finding=say(
@@ -467,15 +492,15 @@ def generate_diagnostics(
                         f"{metric_name} is at {metric['attainment']:.1%} of target.",
                     ),
                     evidence=say(
-                        f"实际值 {actual}，目标值 {goal}。",
-                        f"Actual {actual} against a target of {goal}.",
+                        f"实际值 {actual}，规则目标 {goal}，并非已批准预算。",
+                        f"Actual {actual} against a rule-based target of {goal}, not a budget.",
                     ),
                     recommendation=say(
                         f"由{metric['owner']}负责人建立差距关闭计划，并在决策实验室比较可行方案。",
                         f"{metric['owner']} should own a plan to close the gap and compare "
                         "options in the Decision Lab.",
                     ),
-                    confidence=0.95,
+                    confidence=0.75,
                     code="target_gap",
                 )
             )

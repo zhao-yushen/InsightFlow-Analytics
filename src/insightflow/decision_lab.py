@@ -72,13 +72,16 @@ def project_outcome(
     cancellation_change = scenario.cancellation_change_pp / 100
 
     baseline_discount = baseline["discount_rate"]
-    effective_price_change = price_change - discount_change / max(1 - baseline_discount, 0.3)
+    # Demand answers the discount that can really be given, not the one asked for: a ledger
+    # with no discounts has none to cut.
+    discount_rate = float(np.clip(baseline_discount + discount_change, 0, 0.40))
+    given = discount_rate - baseline_discount
+    effective_price_change = price_change - given / max(1 - baseline_discount, 0.3)
     price_base = max(1 + effective_price_change, 0.1)
     price_factor = np.clip(price_base**elasticity, 0.35, 2.25)
     marketing_factor = np.clip(1 + marketing_response * marketing_change, 0.55, 1.8)
     demand_factor = price_factor * marketing_factor * baseline_demand
 
-    discount_rate = float(np.clip(baseline_discount + discount_change, 0, 0.40))
     gross = baseline["gross_revenue"] * demand_factor * (1 + price_change)
     sales_net = gross * (1 - discount_rate)
     baseline_sales_net = baseline["gross_revenue"] - baseline["discount_amount"]

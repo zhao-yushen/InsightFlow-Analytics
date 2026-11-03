@@ -23,6 +23,7 @@ reports/*.docx
 data/raw/*.csv
 data/raw/multitable_demo/
 data/warehouse/*.db-*
+data/warehouse/backups/
 exports/
 .coverage
 *.zip

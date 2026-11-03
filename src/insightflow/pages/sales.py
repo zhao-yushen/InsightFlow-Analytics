@@ -6,8 +6,14 @@ from insightflow.config import DEFAULT_DB_PATH
 from insightflow.currency import money, symbol
 from insightflow.design import COLORS
 from insightflow.diagnostics import dimension_change
-from insightflow.i18n import t, tr
-from insightflow.metrics import dimension_performance, monthly_trend, weekday_pattern
+from insightflow.geography import country_label
+from insightflow.i18n import base_period, current_language, t, tr
+from insightflow.metrics import (
+    dimension_performance,
+    monthly_trend,
+    partial_month,
+    weekday_pattern,
+)
 from insightflow.ui import (
     currency_code,
     note,
@@ -44,11 +50,12 @@ def render() -> None:
         )
         return
     top = change.iloc[0]
+    market = country_label(top["country"], current_language())
     page_header(
         t("page.sales.title"),
         tr(
-            f"变化最大的市场是 {top['country']}，净销售额变化 {money(top['change'], code, short=True)}。",
-            f"{top['country']} moved most, with net revenue changing by "
+            f"变化最大的市场是{market}，净销售额变化 {money(top['change'], code, short=True)}。",
+            f"{market} moved most, with net revenue changing by "
             f"{money(top['change'], code, short=True)}.",
         ),
         meta=period_meta(filters),
@@ -73,7 +80,14 @@ def render() -> None:
     label, unit = metrics[metric]
     with st.container(key="unroll_sales_trend"):
         show(
-            trend_lines(trend, "month", {metric: (label, COLORS["flow"])}, money_prefix=unit, height=320),
+            trend_lines(
+                trend,
+                "month",
+                {metric: (label, COLORS["flow"])},
+                money_prefix=unit,
+                height=320,
+                unfinished=partial_month(DEFAULT_DB_PATH),
+            ),
             key="sales_trend",
         )
 
@@ -109,7 +123,7 @@ def render() -> None:
             )
 
     section_header(
-        tr("相对上期的变化", "Change on the prior period"),
+        tr(f"相对{base_period()}的变化", f"Change on {base_period()}"),
         tr("同长度的两个周期对比", "Two periods of equal length"),
     )
     dimension = st.segmented_control(

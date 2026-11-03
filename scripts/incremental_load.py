@@ -10,7 +10,6 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from insightflow.config import DEFAULT_DB_PATH
-from insightflow.data_contracts import contract_block_message
 from insightflow.etl import clean_transactions, load_source
 from insightflow.warehouse import build_warehouse
 
@@ -27,9 +26,9 @@ def main() -> None:
         source_profile="incremental_import",
         transaction_status="Verified",
     )
-    block_message = contract_block_message(result.contract_issues)
-    if block_message:
-        raise SystemExit(block_message)
+    block_reasons = result.block_reasons()
+    if block_reasons:
+        raise SystemExit("；".join(block_reasons))
     stats = build_warehouse(result, DEFAULT_DB_PATH, load_mode="append", source_name=source.name)
     print(f"Inserted rows: {stats['inserted_rows']:,}")
     print(f"Skipped duplicates: {stats['skipped_rows']:,}")

@@ -169,9 +169,9 @@ def load_multitable_directory(directory: str | Path) -> pd.DataFrame:
 def load_olist_directory(directory: str | Path) -> pd.DataFrame:
     """Load the public Olist multi-table schema into InsightFlow's canonical grain.
 
-    Expected filenames follow the original Olist dataset naming convention. Cost, inventory,
-    marketing and elasticity fields are intentionally left absent and will be labelled Estimated
-    or Simulated by the ETL provenance layer.
+    Expected filenames follow the original Olist dataset naming convention. Cost, marketing
+    and elasticity are left absent, so the ETL labels them Estimated, and stock levels stay
+    empty because the source holds none.
     """
     root = Path(directory)
     orders = pd.read_csv(root / "olist_orders_dataset.csv")

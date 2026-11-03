@@ -518,6 +518,13 @@ def language_name(code: str) -> str:
     return LANGUAGES.get(code, code)
 
 
+def base_period() -> str:
+    """Name what the current period is compared with, in running text."""
+    if st.session_state.get("compare_basis") == "year":
+        return tr("去年同期", "the same period last year")
+    return tr("上期", "the prior period")
+
+
 def tr(chinese: str, english: str) -> str:
     """Pick inline copy. Chinese shows only in zh-CN; every other locale reads the English."""
     return chinese if current_language() == "zh-CN" else english
