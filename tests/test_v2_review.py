@@ -142,6 +142,13 @@ def test_category_baskets_name_categories(demo_warehouse):
     assert (product["antecedent_name"] != product["antecedent"]).any()
 
 
+def test_disabled_buttons_do_not_look_ready():
+    from insightflow.design import GLOBAL_CSS
+
+    assert 'button[kind="primary"]:disabled' in GLOBAL_CSS
+    assert GLOBAL_CSS.index(":disabled") > GLOBAL_CSS.index('button[kind="primary"]:hover')
+
+
 def test_report_escapes_text_that_came_from_data(demo_warehouse, last_quarter):
     kpi = kpi_summary(demo_warehouse, last_quarter)
     issues, drivers = generate_diagnostics(demo_warehouse, last_quarter)

@@ -8,6 +8,7 @@ from insightflow.currency import money, symbol
 from insightflow.design import COLORS
 from insightflow.diagnostics import generate_diagnostics
 from insightflow.forecasting import forecast_metric
+from insightflow.geography import country_label
 from insightflow.i18n import base_period, current_language, t, tr
 from insightflow.live import gauge_strip, money_river
 from insightflow.metrics import (
@@ -66,7 +67,10 @@ def _leak_detail(filters: FilterSpec, leak: str, code: str) -> None:
     ):
         with column:
             subhead(title)
-            frame = leak_drivers(DEFAULT_DB_PATH, filters, leak, dimension).rename(
+            frame = leak_drivers(DEFAULT_DB_PATH, filters, leak, dimension)
+            if dimension == "country":
+                frame["item"] = frame["item"].map(lambda value: country_label(value, current_language()))
+            frame = frame.rename(
                 columns={
                     "item": item,
                     "amount": amount,

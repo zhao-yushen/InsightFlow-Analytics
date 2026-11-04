@@ -224,6 +224,15 @@ html, body, [class*="css"], [data-testid="stAppViewContainer"] {
   font-weight: 600;
 }
 .stButton > button[kind="primary"]:hover { background: #63E2D4; border-color: #63E2D4; }
+/* A disabled button must look disabled, or a step that is still waiting reads as ready. */
+.stButton > button:disabled, .stDownloadButton > button:disabled,
+.stFormSubmitButton > button:disabled, .stButton > button[kind="primary"]:disabled,
+.stFormSubmitButton > button[kind="primary"]:disabled {
+  background: #17345C;
+  border-color: #274A78;
+  color: #8BA3C2;
+  cursor: not-allowed;
+}
 :is(a, button, [role="tab"], input, [tabindex]):focus-visible {
   outline: 2px solid #38D6C4 !important;
   outline-offset: 2px;
