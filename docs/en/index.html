@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>InsightFlow 2.0</title>
+<meta name="description" content="InsightFlow is a retail analytics and decision platform. It turns transaction data into a money flow you can see, explains why profit changed and simulates a decision before you make it. Import, reconciliation and every page have been tested on a real public ledger of 1.06 million lines.">
+<link rel="alternate" hreflang="zh-CN" href="../">
+<style>
+@font-face {
+  font-family: "Sora";
+  src: url("../assets/fonts/sora-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 800;
+  font-display: swap;
+}
+:root {
+  --page: #0A1F3D;
+  --panel: #0F2747;
+  --raised: #17345C;
+  --line: #274A78;
+  --grid: #1C3A63;
+  --ink: #EAF4FF;
+  --ink-soft: #B4C7DF;
+  --muted: #8BA3C2;
+  --flow: #38D6C4;
+  --profit: #FFC44D;
+  --leak: #FF7B6B;
+  --radius: 10px;
+}
+* { box-sizing: border-box; }
+html { background: var(--page); scroll-behavior: smooth; scroll-padding-top: 64px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: Sora, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--flow); text-underline-offset: 3px; }
+a:focus-visible, .toc a:focus-visible { outline: 2px solid var(--flow); outline-offset: 3px; border-radius: 4px; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+img { display: block; max-width: 100%; height: auto; }
+
+/* Navigation */
+.toc {
+  position: sticky; top: 0; z-index: 10;
+  background: rgba(10, 31, 61, .9); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--grid);
+}
+.toc .wrap { display: flex; align-items: center; gap: 14px; height: 56px; }
+.toc .links { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; height: 100%; padding: 0 4px; overflow-x: auto; scrollbar-width: none; }
+.toc .links::-webkit-scrollbar { display: none; }
+.toc b { font-weight: 700; white-space: nowrap; margin-right: 6px; }
+.toc a { color: var(--ink-soft); text-decoration: none; font-size: .86rem; white-space: nowrap; }
+.toc a:hover { color: var(--ink); }
+.toc a.lang { flex: none; padding-left: 14px; border-left: 1px solid var(--line); color: var(--flow); }
+
+/* Hero */
+header.hero { padding: 64px 0 34px; }
+.version { color: var(--muted); font-size: .92rem; margin: 0 0 12px; }
+h1 { font-size: clamp(2.4rem, 5.4vw, 3.9rem); line-height: 1.1; letter-spacing: -.02em; margin: 0 0 20px; }
+h1 span { color: var(--flow); }
+.lede { font-size: clamp(1.05rem, 1.7vw, 1.28rem); color: var(--ink-soft); max-width: 46em; margin: 0; }
+.facts { display: flex; flex-wrap: wrap; gap: 10px 26px; margin: 24px 0 0; padding: 0; list-style: none; color: var(--ink-soft); font-size: .95rem; }
+.facts li b { color: var(--ink); font-weight: 650; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+.button {
+  display: inline-block; padding: 11px 18px; border-radius: var(--radius);
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  text-decoration: none; font-weight: 600;
+}
+.button.primary { background: var(--flow); border-color: var(--flow); color: #06213A; }
+.button:hover { border-color: var(--flow); }
+
+/* Media */
+figure { margin: 0; }
+.shot {
+  border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--panel);
+  box-shadow: 0 22px 54px rgba(3, 12, 26, .5);
+}
+.shot.flat { box-shadow: none; }
+.shot.center { display: flex; justify-content: center; background: #0B2140; }
+.shot.center img { width: auto; max-height: 520px; }
+figcaption { color: var(--muted); font-size: .88rem; margin-top: 10px; line-height: 1.6; }
+.motion-label { display: inline-block; font-size: .78rem; color: #06213A; background: var(--flow); border-radius: 999px; padding: 1px 9px; margin-right: 6px; font-weight: 650; vertical-align: 1px; }
+
+/* Sections */
+section { padding: 72px 0 0; }
+.chapter { color: var(--flow); font-weight: 650; font-size: .95rem; margin: 0 0 6px; }
+h2 { font-size: clamp(1.6rem, 3vw, 2.2rem); line-height: 1.28; margin: 0 0 12px; letter-spacing: -.01em; }
+.section-lede { color: var(--ink-soft); margin: 0 0 30px; max-width: 50em; font-size: 1.04rem; }
+.feature { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 44px; align-items: start; margin-top: 34px; }
+.feature.reverse { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+.feature.reverse .feature-text { order: 2; }
+.feature-text h3 { font-size: 1.22rem; margin: 6px 0 10px; line-height: 1.4; }
+.feature-text p { color: var(--ink-soft); margin: 0 0 14px; }
+.points { margin: 0 0 6px; padding: 0; list-style: none; }
+.points li { position: relative; padding-left: 20px; margin: 9px 0; color: var(--ink-soft); }
+.points li::before { content: ""; position: absolute; left: 2px; top: .68em; width: 8px; height: 8px; border-radius: 50%; background: var(--flow); }
+.note { border-left: 3px solid var(--profit); background: var(--panel); padding: 12px 16px; border-radius: 0 8px 8px 0; color: var(--ink-soft); font-size: .93rem; margin: 16px 0 0; }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin-top: 30px; }
+.wide { margin-top: 30px; }
+
+/* Pipeline diagram */
+.pipeline { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 26px 22px 18px; }
+.pipeline svg { width: 100%; height: auto; display: block; }
+.stages { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.stages div { font-size: .84rem; color: var(--ink-soft); line-height: 1.55; }
+.stages b { display: block; color: var(--ink); font-size: .92rem; margin-bottom: 2px; }
+
+/* Numbers */
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.stat { background: var(--panel); padding: 20px 20px 18px; }
+.stat b { display: block; font-size: clamp(1.5rem, 2.8vw, 2.1rem); line-height: 1.2; letter-spacing: -.02em; }
+.stat b.gold { color: var(--profit); }
+.stat b.aqua { color: var(--flow); }
+.stat span { display: block; color: var(--ink-soft); font-size: .9rem; margin-top: 6px; }
+.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.lessons { width: 100%; border-collapse: collapse; font-size: .94rem; }
+.lessons th, .lessons td { text-align: left; padding: 13px 14px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+.lessons tr:last-child td { border-bottom: 0; }
+.lessons th { color: var(--muted); font-weight: 600; font-size: .86rem; }
+.lessons td:first-child { color: var(--ink); width: 24%; }
+.lessons td.before { color: var(--leak); }
+.lessons td.after { color: var(--ink-soft); }
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 22px; }
+.card h3 { font-size: 1.04rem; margin: 0 0 8px; }
+.card p, .card li { color: var(--ink-soft); font-size: .93rem; }
+.card p { margin: 0; }
+.card ul { margin: 0; padding-left: 1.1em; }
+.card li { margin: 5px 0; }
+code { background: var(--raised); padding: 1px 6px; border-radius: 5px; font-size: .9em; }
+pre {
+  margin: 0; padding: 16px 18px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); overflow-x: auto; color: var(--ink); font-size: .92rem; line-height: 1.6;
+}
+pre code { background: none; padding: 0; }
+footer { margin-top: 80px; padding: 28px 0 48px; border-top: 1px solid var(--grid); color: var(--muted); font-size: .9rem; }
+footer p { margin: 4px 0; }
+
+@media (max-width: 960px) {
+  .feature, .feature.reverse { grid-template-columns: 1fr; gap: 22px; }
+  .feature.reverse .feature-text { order: 0; }
+  .stages { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .wrap { padding: 0 16px; }
+  header.hero { padding-top: 40px; }
+  section { padding-top: 56px; }
+  .pair, .cards { grid-template-columns: 1fr; }
+  .stages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lessons td:first-child { width: auto; }
+}
+</style>
+</head>
+<body>
+<nav class="toc" aria-label="Page contents">
+  <div class="wrap">
+    <b>InsightFlow 2.0</b>
+    <div class="links">
+      <a href="#overview">Overview</a>
+      <a href="#profit">Profit</a>
+      <a href="#markets">Markets</a>
+      <a href="#customers">Customers</a>
+      <a href="#products">Products</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#decisions">Decisions</a>
+      <a href="#experiments">Experiments</a>
+      <a href="#operations">Actions</a>
+      <a href="#import">Import</a>
+      <a href="#trust">Trust</a>
+      <a href="#validation">Validation</a>
+      <a href="#start">Start</a>
+    </div>
+    <a class="lang" href="../" hreflang="zh-CN" lang="zh-CN">中文</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <header class="hero">
+    <p class="version">Version 2.0.0, released November 2026</p>
+    <h1>InsightFlow <span>2.0</span></h1>
+    <p class="lede">A retail analytics and decision platform. Import a sales ledger and it draws where the money comes from and where it leaks away as a single flow, explains why profit changed, points out the issues worth acting on, and simulates the likely result before you change a price, run a promotion or adjust marketing.</p>
+    <ul class="facts">
+      <li><b>1.06M lines</b> of a real ledger imported and tested</li>
+      <li><b>17</b> analysis pages</li>
+      <li><b>250</b> automated tests</li>
+      <li><b>Runs offline</b> with no external libraries behind the animated components</li>
+    </ul>
+    <div class="actions">
+      <a class="button primary" href="https://github.com/zhao-yushen/InsightFlow-Analytics">View the source</a>
+      <a class="button" href="#start">Run it locally</a>
+      <a class="button" href="https://github.com/zhao-yushen/InsightFlow-Analytics/blob/main/docs/validation.md">Validation record</a>
+      <a class="button" href="https://github.com/zhao-yushen/InsightFlow-Analytics/releases/tag/v2.0.0">Release notes</a>
+    </div>
+  </header>
+
+  <figure>
+    <div class="shot">
+      <picture>
+        <source srcset="../assets/showcase/overview-river.webp" media="(prefers-reduced-motion: reduce)">
+        <img src="../assets/showcase/river-flow.webp" width="1066" height="412" alt="Animated money river: gross sales flow from left to right, discounts, refunds, product cost, shipping, payment, marketing and return handling branch off in turn, and contribution profit is what remains">
+      </picture>
+    </div>
+    <figcaption><span class="motion-label">Animation</span>The money river. The width of the channel is the amount, each stream that branches off downward is an outflow, and what reaches the right edge is contribution profit. Screenshots and animations use reproducible simulated demo data and show the Chinese interface; the app also has an English one.</figcaption>
+  </figure>
+
+  <section id="pipeline" aria-labelledby="pipeline-title">
+    <p class="chapter">How it works</p>
+    <h2 id="pipeline-title">How a sales ledger becomes a decision</h2>
+    <p class="section-lede">Every page reads the same ledger of signed amounts. A return is a negative entry, so totals at every level already net out returns. Each line also records where its data came from, and a metric is only as trustworthy as its weakest input.</p>
+    <div class="pipeline">
+      <svg viewBox="0 0 1120 120" role="img" aria-label="Data flow: ingest, validate, clean, warehouse, analyse, decide, deliver">
+        <defs>
+          <linearGradient id="beam" x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0" stop-color="#38D6C4" stop-opacity=".85"/>
+            <stop offset=".7" stop-color="#38D6C4" stop-opacity=".7"/>
+            <stop offset="1" stop-color="#FFC44D" stop-opacity=".95"/>
+          </linearGradient>
+        </defs>
+        <rect x="20" y="52" width="1080" height="16" rx="8" fill="url(#beam)"/>
+        <g font-family="Sora, sans-serif" font-size="15" fill="#EAF4FF" text-anchor="middle" font-weight="600">
+          <g><circle cx="80" cy="60" r="26" fill="#0F2747" stroke="#38D6C4" stroke-width="2"/><text x="80" y="65">1</text></g>
+          <g><circle cx="240" cy="60" r="26" fill="#0F2747" stroke="#38D6C4" stroke-width="2"/><text x="240" y="65">2</text></g>
+          <g><circle cx="400" cy="60" r="26" fill="#0F2747" stroke="#38D6C4" stroke-width="2"/><text x="400" y="65">3</text></g>
+          <g><circle cx="560" cy="60" r="26" fill="#0F2747" stroke="#38D6C4" stroke-width="2"/><text x="560" y="65">4</text></g>
+          <g><circle cx="720" cy="60" r="26" fill="#0F2747" stroke="#38D6C4" stroke-width="2"/><text x="720" y="65">5</text></g>
+          <g><circle cx="880" cy="60" r="26" fill="#0F2747" stroke="#38D6C4" stroke-width="2"/><text x="880" y="65">6</text></g>
+          <g><circle cx="1040" cy="60" r="26" fill="#0F2747" stroke="#FFC44D" stroke-width="2"/><text x="1040" y="65">7</text></g>
+        </g>
+        <g font-family="Sora, sans-serif" font-size="14" fill="#B4C7DF" text-anchor="middle">
+          <text x="80" y="112">Ingest</text><text x="240" y="112">Validate</text><text x="400" y="112">Clean</text><text x="560" y="112">Warehouse</text><text x="720" y="112">Analyse</text><text x="880" y="112">Decide</text><text x="1040" y="112">Deliver</text>
+        </g>
+      </svg>
+      <div class="stages">
+        <div><b>1 Ingest</b>CSV, Excel, Parquet and JSON, including GBK encoding and Chinese headers. You confirm how the columns map.</div>
+        <div><b>2 Validate</b>Raw values are checked before anything is estimated. Failing lines are set aside with the reason recorded.</div>
+        <div><b>3 Clean</b>Countries, dates and amounts are standardised, and postage, fees and other non-merchandise lines are picked out.</div>
+        <div><b>4 Warehouse</b>A SQLite ledger, dimension tables and a metric catalogue, with a source label on every line.</div>
+        <div><b>5 Analyse</b>Profit bridge, price elasticity, forecasts, churn, inventory and market baskets.</div>
+        <div><b>6 Decide</b>Scenario simulation, plan search, A/B verdicts and an action list.</div>
+        <div><b>7 Deliver</b>17 pages, a question assistant, and reports in HTML, Word and Markdown.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="overview" aria-labelledby="overview-title">
+    <p class="chapter">Executive Overview</p>
+    <h2 id="overview-title">Where the money went, at a glance</h2>
+    <p class="section-lede">The overview opens with one sentence on what happened this period, such as "Net revenue is up £290.6K on the previous period. The biggest profit lift came from volume; the biggest drag was discounting." The charts below give the evidence for that sentence.</p>
+
+    <div class="feature">
+      <div class="feature-text">
+        <h3>The money river: the income statement as a flow</h3>
+        <p>The river starts with gross sales. As it flows right, discounts, refunds, product cost, shipping, payment, marketing and return handling branch off in turn. Each stream is as wide as its amount, and what remains at the end is contribution profit.</p>
+        <ul class="points">
+          <li>Click any outflow and its breakdown by category and by market opens below, along with how its share of sales has moved against the comparison period.</li>
+          <li>The metric strip shows net revenue, contribution profit, margin, orders, customers and return rate, each with its change against the comparison period and a 12-month trend line.</li>
+          <li>You can compare with the previous period or with the same period last year. Retail is seasonal, and a December compared with the quarter before it often makes the peak season look like growth.</li>
+        </ul>
+      </div>
+      <figure>
+        <div class="shot">
+          <picture>
+            <source srcset="../assets/showcase/overview-drilldown.webp" media="(prefers-reduced-motion: reduce)">
+            <img src="../assets/showcase/drilldown.webp" width="1132" height="1292" loading="lazy" alt="Drill-down animation: after a click on the product cost stream, tables of cost by category and by market open below">
+          </picture>
+        </div>
+        <figcaption><span class="motion-label">Animation</span>Clicking product cost opens its breakdown by category and by market.</figcaption>
+      </figure>
+    </div>
+
+    <div class="feature reverse">
+      <div class="feature-text">
+        <h3>Trends, signals and outlook</h3>
+        <p>The trend chart shows two years of net revenue, gross profit and contribution profit. The current, unfinished month is drawn as a dashed line, because a month with too few days in it always looks like a decline.</p>
+        <ul class="points">
+          <li>Issues worth acting on are ranked from P0 to P3, for example pressure on profit, a rising return rate or a restocking risk, and each comes with its evidence.</li>
+          <li>Contribution profit for the next three months is shown with 80% and 95% intervals. A wider band means more uncertainty.</li>
+          <li>Progress against each target is listed. Default targets are the average of the last three months plus a rule-based uplift, not an approved budget, and the page says so.</li>
+        </ul>
+      </div>
+      <div>
+        <figure>
+          <div class="shot"><img src="../assets/showcase/overview-signals.webp" width="1132" height="497" loading="lazy" alt="Trends and signals: monthly trend lines and open issues ranked by priority"></div>
+        </figure>
+        <figure style="margin-top:18px">
+          <div class="shot"><img src="../assets/showcase/overview-outlook.webp" width="1132" height="614" loading="lazy" alt="Outlook and targets: a fan chart of forecast contribution profit and this month's progress against targets"></div>
+          <figcaption>Top: trends and issue signals. Bottom: forecast intervals and progress against targets.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="profit" aria-labelledby="profit-title">
+    <p class="chapter">Profitability &amp; Unit Economics</p>
+    <h2 id="profit-title">Why profit changed, down to the penny</h2>
+    <div class="feature">
+      <div class="feature-text">
+        <h3>A price, volume, mix and cost bridge</h3>
+        <p>A change in profit is easy to put down to "sales were good" or "costs went up". The bridge splits it into parts that do not overlap: volume, product mix, list price, discounting, unit cost, new products, discontinued products, shipping, payment fees, marketing and returns.</p>
+        <ul class="points">
+          <li>The parts add up to the actual change. The unexplained remainder is shown under the chart, and on the demo data it is £0.00.</li>
+          <li>Mix is an item of its own. If the extra sales come from low-margin products, profit can fall while total volume rises.</li>
+          <li>A second waterfall answers "where did the money go", stepping down from gross sales to contribution profit.</li>
+        </ul>
+      </div>
+      <div>
+        <figure>
+          <div class="shot"><img src="../assets/showcase/profit-bridge.webp" width="1132" height="649" loading="lazy" alt="Profit bridge waterfall: from the comparison period's profit, through volume, product mix, discounting and the other changes, to this period's profit"></div>
+        </figure>
+        <figure style="margin-top:18px">
+          <div class="shot"><img src="../assets/showcase/profit-flow.webp" width="1132" height="573" loading="lazy" alt="Waterfall for this period from gross sales to contribution profit"></div>
+          <figcaption>Top: the profit bridge from the comparison period to this one. Bottom: this period, from gross sales to contribution profit.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="markets" aria-labelledby="markets-title">
+    <p class="chapter">Global Markets</p>
+    <h2 id="markets-title">Which markets make money</h2>
+    <div class="feature reverse">
+      <div class="feature-text">
+        <h3>A globe you can drag</h3>
+        <p>Each market is a bubble sized by net revenue. Teal means its margin is above the overall margin and coral means it is below, so a large market that earns little is easy to spot.</p>
+        <ul class="points">
+          <li>Drag to turn the globe, and click a bubble to open that market's details: size, margin, return rate and its main categories.</li>
+          <li>It works from the keyboard too. The left and right arrows turn the globe, the up and down arrows move between markets, and Enter opens the details.</li>
+          <li>It recognises 132 countries and regions, including spellings common in exported files such as EIRE, RSA and USA, as well as Chinese names and ISO codes.</li>
+        </ul>
+      </div>
+      <figure>
+        <div class="shot center">
+          <picture>
+            <source srcset="../assets/showcase/markets-globe.webp" media="(prefers-reduced-motion: reduce)">
+            <img src="../assets/showcase/globe-turn.webp" width="581" height="528" loading="lazy" alt="Globe animation: one full turn by dragging, with market bubbles in Europe, Asia and the Americas coming round to the front in turn">
+          </picture>
+        </div>
+        <figcaption><span class="motion-label">Animation</span>One turn of the globe, by dragging.</figcaption>
+      </figure>
+    </div>
+    <figure class="wide">
+      <div class="shot"><img src="../assets/showcase/markets-globe.webp" width="1132" height="815" loading="lazy" alt="Global Markets page: the globe on the left and net revenue by region on the right"></div>
+      <figcaption>The full page: net revenue by region on the right, and a ranking of every market further down.</figcaption>
+    </figure>
+    <div class="feature">
+      <div class="feature-text">
+        <h3>Sales Diagnostics: where the change came from</h3>
+        <p>The monthly trend switches between net revenue, orders, active customers and average order value. The sales mix splits revenue by country, category and channel and then lists the dimensions that moved most against the comparison period. A day-of-week heatmap shows the rhythm of sales.</p>
+      </div>
+      <div>
+        <figure>
+          <div class="shot"><img src="../assets/showcase/sales-trend.webp" width="1132" height="505" loading="lazy" alt="Sales Diagnostics: monthly net revenue trend"></div>
+        </figure>
+        <figure style="margin-top:18px">
+          <div class="shot"><img src="../assets/showcase/sales-mix.webp" width="1132" height="775" loading="lazy" alt="Sales mix: net revenue and contribution margin by country, category and channel"></div>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="customers" aria-labelledby="customers-title">
+    <p class="chapter">Customer Value &amp; Churn</p>
+    <h2 id="customers-title">Who is worth most, and who may not come back</h2>
+    <div class="feature reverse">
+      <div class="feature-text">
+        <h3>A model is used only after it passes validation</h3>
+        <p>Customers are first grouped by recency, frequency and spend into Champions, Loyal, Developing, Potential, At Risk and Hibernating. The churn model then predicts whether each customer will buy again in the next 90 days.</p>
+        <ul class="points">
+          <li>Validation is out of time. The model is trained on older data and scored on what customers actually did in the following 90 days. If its AUC is below 0.60, the page says so and switches to an interpretable rule-based score.</li>
+          <li>The calibration chart shows whether predicted probabilities match actual repurchase rates. The closer the points sit to the diagonal, the more literally you can read the probabilities.</li>
+          <li>The priority contact list is sorted by expected profit × churn risk and suggests a win-back offer, automated outreach or a cross-sell.</li>
+          <li>Coverage is stated. Anonymous orders are outside the customer analysis, and the page shows what share of revenue carries a customer ID.</li>
+        </ul>
+      </div>
+      <div>
+        <figure>
+          <div class="shot"><img src="../assets/showcase/customers-churn.webp" width="1132" height="671" loading="lazy" alt="Churn prediction: a scatter of customer value against churn risk, and the model's calibration curve"></div>
+        </figure>
+        <figure style="margin-top:18px">
+          <div class="shot"><img src="../assets/showcase/customers-segments.webp" width="1132" height="533" loading="lazy" alt="Customer segment treemap: contribution profit from Champions, Loyal, Developing, At Risk, Hibernating and Potential customers"></div>
+          <figcaption>Top: value against risk, and the model's calibration. Bottom: contribution profit by customer segment.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="products" aria-labelledby="products-title">
+    <p class="chapter">Products &amp; Inventory</p>
+    <h2 id="products-title">What sells, what sells together, what to restock</h2>
+    <div class="feature">
+      <div class="feature-text">
+        <h3>Concentration and baskets</h3>
+        <p>The cumulative revenue curve shows how much revenue depends on the top products, counted over every product rather than the top few hundred. The product efficiency map puts sales next to contribution margin and marks the products that sell a lot but earn little.</p>
+        <ul class="points">
+          <li>Products bought together are measured by lift. A lift of 2 means two products appear in the same order twice as often as random pairing would predict.</li>
+          <li>A pair is listed only when it has at least 8 shared orders, so chance is not mistaken for a pattern.</li>
+        </ul>
+      </div>
+      <div>
+        <figure>
+          <div class="shot"><img src="../assets/showcase/products-concentration.webp" width="1132" height="507" loading="lazy" alt="Revenue concentration: cumulative revenue curve and the top ten products by net revenue"></div>
+        </figure>
+        <figure style="margin-top:18px">
+          <div class="shot"><img src="../assets/showcase/products-basket.webp" width="1132" height="661" loading="lazy" alt="Basket table: products often bought together, with shared orders, attach rate and lift"></div>
+        </figure>
+      </div>
+    </div>
+    <div class="feature reverse">
+      <div class="feature-text">
+        <h3>Restocking set by service level</h3>
+        <p>Products fall into nine classes by value (ABC) and demand stability (XYZ). AX items suit automatic replenishment; AZ items need someone watching them. Safety stock depends on the target service level, demand variability and lead-time variability together.</p>
+        <ul class="points">
+          <li>Demand is counted net, so an order placed and cancelled on the same day is not demand.</li>
+          <li>The restocking list shows stock on hand, the reorder point, a suggested order quantity, the expected stockout date and the profit a stockout would cost. It can be downloaded.</li>
+          <li>When the data has no stock column, the page analyses demand only and does not invent stock levels to raise restocking alerts.</li>
+        </ul>
+      </div>
+      <figure>
+        <div class="shot"><img src="../assets/showcase/inventory-policy.webp" width="1132" height="943" loading="lazy" alt="Restocking policy: ABC-XYZ revenue heatmap and the products with the largest stockout losses"></div>
+      </figure>
+    </div>
+  </section>
+
+  <section id="pricing" aria-labelledby="pricing-title">
+    <p class="chapter">Pricing Lab</p>
+    <h2 id="pricing-title">How sensitive customers are to price, and whether to change it</h2>
+    <div class="feature">
+      <div class="feature-text">
+        <h3>Price elasticity from your own orders</h3>
+        <p>Each category gets a Poisson regression of weekly orders on the price actually paid. The model holds fixed each product's own popularity and each week's seasonal effect, so peak seasons and best sellers are not mistaken for price effects.</p>
+        <ul class="points">
+          <li>Each sales channel is tracked on its own. The same product often has different price lists in the web shop and the wholesale channel, and mixing them would read a shift between channels as a price change.</li>
+          <li>Standard errors are clustered by product, and estimates are shrunk toward a category prior. Categories with little data stay close to the industry assumption, those with plenty are driven mainly by the data, and every row says which it is.</li>
+          <li>Every price recommendation shows the profit change at both ends of the 95% elasticity interval, and it counts as robust only if the unfavourable end still makes money.</li>
+        </ul>
+        <p class="note">Historical prices were not set at random, and the estimates hold only near the prices already seen. The page recommends confirming a price change with an A/B test before rolling it out everywhere.</p>
+      </div>
+      <div>
+        <figure>
+          <div class="shot"><img src="../assets/showcase/pricing-elasticity.webp" width="1132" height="892" loading="lazy" alt="Price elasticity chart: the estimate from the data, its 95% interval and the industry assumption for each category"></div>
+        </figure>
+        <figure style="margin-top:18px">
+          <div class="shot"><img src="../assets/showcase/pricing-moves.webp" width="1132" height="785" loading="lazy" alt="Price recommendations: the expected change in contribution profit and its interval for each category"></div>
+          <figcaption>Top: elasticity estimates and intervals by category. Bottom: suggested price moves and their profit intervals.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="decisions" aria-labelledby="decisions-title">
+    <p class="chapter">Probabilistic Decision Lab</p>
+    <h2 id="decisions-title">See thousands of possible results before you decide</h2>
+    <div class="feature reverse">
+      <div class="feature-text">
+        <h3>Each plan produces a distribution of outcomes</h3>
+        <p>Change price, discount, marketing, purchase cost or return rate, and the lab draws 5,000 possible futures. Price elasticity, marketing response, baseline demand, purchase cost and shipping cost all vary across the draws, and the main uncertainty settings are inputs on the page.</p>
+        <ul class="points">
+          <li>Each falling dot is one possible outcome. Red on the left is a fall in profit and teal on the right is an improvement.</li>
+          <li>The lab also reports the median profit change, a bad case (5th percentile) and a good case (95th percentile), the probability of an improvement and the probability of more revenue with less profit.</li>
+          <li>The sensitivity bars show which assumption moves the result most, which is the one worth pinning down first.</li>
+        </ul>
+      </div>
+      <figure>
+        <div class="shot center">
+          <picture>
+            <source srcset="../assets/showcase/decision-simulation.webp" media="(prefers-reduced-motion: reduce)">
+            <img src="../assets/showcase/simulation-drop.webp" width="643" height="352" loading="lazy" alt="Simulation animation: thousands of simulated outcomes fall like rain and pile up into the distribution of profit change">
+          </picture>
+        </div>
+        <figcaption><span class="motion-label">Animation</span>After an input changes, the simulated outcomes fall again and pile up into the distribution of profit change.</figcaption>
+      </figure>
+    </div>
+    <div class="pair">
+      <figure>
+        <div class="shot"><img src="../assets/showcase/decision-simulation.webp" width="1132" height="1284" loading="lazy" alt="Risk simulation page: plan inputs, the distribution of profit change and sensitivity"></div>
+        <figcaption>Risk simulation: inputs, distribution, headline numbers and sensitivity on one screen.</figcaption>
+      </figure>
+      <figure>
+        <div class="shot"><img src="../assets/showcase/decision-frontier.webp" width="1132" height="1405" loading="lazy" alt="Optimiser: hundreds of plans placed by return and risk, with the recommended plan"></div>
+        <figcaption>Optimiser: every combination of price, discount and marketing faces the same simulated futures, and the plans with the best return for their risk are marked.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="experiments" aria-labelledby="experiments-title">
+    <p class="chapter">A/B Experiment Analysis</p>
+    <h2 id="experiments-title">Does this experiment support a conclusion?</h2>
+    <div class="feature">
+      <div class="feature-text">
+        <h3>When the evidence falls short, the verdict is "inconclusive"</h3>
+        <p>An experiment is judged on revenue, profit and returns as well as conversion. Every metric gets a 95% interval, and the evidence leads to one of four verdicts: ship, pilot, inconclusive or stop.</p>
+        <ul class="points">
+          <li>Ship requires the whole profit interval to sit above zero. Stop means profit clearly fell or returns crossed a guardrail.</li>
+          <li>A split check raises an alert when the control and treatment groups differ in size more than chance allows, which usually means the assignment went wrong.</li>
+          <li>The page gives the minimum detectable lift and the sample size needed, so you can tell whether the experiment could have found a meaningful effect at all.</li>
+          <li>You can import customer-level results from a real experiment. The demo experiments appear only in the simulated warehouse.</li>
+        </ul>
+      </div>
+      <div>
+        <figure>
+          <div class="shot"><img src="../assets/showcase/experiments-result.webp" width="1132" height="903" loading="lazy" alt="Experiment result: the change and 95% interval for each metric, with the rollout recommendation"></div>
+        </figure>
+        <figure style="margin-top:18px">
+          <div class="shot"><img src="../assets/showcase/experiments-checks.webp" width="1132" height="520" loading="lazy" alt="Experiment reliability checks: whether the split was even and whether the sample was large enough"></div>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="operations" aria-labelledby="operations-title">
+    <p class="chapter">Diagnostics, forecasting and actions</p>
+    <h2 id="operations-title">From finding a problem to giving it an owner</h2>
+    <div class="feature reverse">
+      <div class="feature-text">
+        <h3>Root-cause diagnostics and forecasting</h3>
+        <p>A Shapley decomposition splits the revenue change exactly into active customers, purchase frequency and average order value. The page then finds where the change was largest by country, category and channel, and marks unusual months in the history.</p>
+        <p>The forecasting page compares up to ten time-series models and one ensemble. It ranks them by rolling-backtest error, picks the most accurate and states how much better it is than repeating last month.</p>
+      </div>
+      <div>
+        <figure>
+          <div class="shot"><img src="../assets/showcase/diagnostics-drivers.webp" width="1132" height="950" loading="lazy" alt="Root-cause diagnostics: what drove the change in revenue and profit"></div>
+        </figure>
+        <figure style="margin-top:18px">
+          <div class="shot"><img src="../assets/showcase/planning-forecast.webp" width="1132" height="1352" loading="lazy" alt="Forecasting page: a fan chart for the coming months and each model's backtest score"></div>
+        </figure>
+      </div>
+    </div>
+    <div class="feature">
+      <div class="feature-text">
+        <h3>Action Center, assistant and reports</h3>
+        <ul class="points">
+          <li>The Action Center turns diagnosed issues into actions you can assign, each with an owner, a due date and a status. An issue keeps one record across different date ranges.</li>
+          <li>The assistant takes questions in plain language, such as "Why did profit fall?". It answers only the 12 kinds of question its reviewed queries cover and shows the calculation behind each answer. When it cannot answer, it says so.</li>
+          <li>Business reports come out in one click as HTML, Word and Markdown, with the same numbers as the pages.</li>
+        </ul>
+      </div>
+      <div>
+        <figure>
+          <div class="shot"><img src="../assets/showcase/assistant-answer.webp" width="1132" height="760" loading="lazy" alt="Assistant: answering why profit fell, with a data table and the calculation method"></div>
+        </figure>
+        <figure style="margin-top:18px">
+          <div class="shot"><img src="../assets/showcase/actions-register.webp" width="1132" height="1027" loading="lazy" alt="Action Center: owner, due date and status for each open issue"></div>
+          <figcaption>Top: the assistant. Bottom: the Action Center.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="import" aria-labelledby="import-title">
+    <p class="chapter">Data import</p>
+    <h2 id="import-title">Import your own data; a few bad lines will not sink the file</h2>
+    <p class="section-lede">Below is the import of the public UCI Online Retail II dataset: a 45 MB Excel file with two yearly sheets and 1.06 million lines.</p>
+    <div class="feature reverse">
+      <div class="feature-text">
+        <h3>Check, confirm, then import</h3>
+        <ul class="points">
+          <li>Columns are matched automatically. Headers such as Invoice, StockCode and Price map to order number, product code and unit price, and the page asks you to confirm any match it is unsure of.</li>
+          <li>The pre-import check lists 5,959 problem lines (0.58%, almost all zero prices) and 5,827 non-merchandise lines such as postage and fees, each with its reason and amount. You can download them to check.</li>
+          <li>You decide. "Import data" becomes clickable only after you tick "Set these rows aside and continue". Set-aside lines stay in the warehouse for reference but count toward no metric.</li>
+          <li>By default the import replaces the demo data, so real and simulated data do not mix. The warehouse is backed up before each import, the latest three backups are kept, and you can restore any of them.</li>
+        </ul>
+        <p class="note">The whole file is refused only for a structural problem, such as a missing exchange rate, or when more than 30% of lines fail, which usually means a column was mapped wrongly.</p>
+      </div>
+      <figure>
+        <div class="shot">
+          <picture>
+            <source srcset="../assets/showcase/import-check.webp" media="(prefers-reduced-motion: reduce)">
+            <img src="../assets/showcase/import-consent.webp" width="1132" height="1515" loading="lazy" alt="Import animation: after the real workbook is uploaded, the column matching, pre-import check and problem lines appear; once the set-aside box is ticked, the import button turns from grey to clickable">
+          </picture>
+        </div>
+        <figcaption><span class="motion-label">Animation</span>The import button stays grey until you tick the box that sets the 5,959 lines aside.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="trust" aria-labelledby="trust-title">
+    <p class="chapter">Trust Center</p>
+    <h2 id="trust-title">Every number can say where it came from</h2>
+    <div class="feature">
+      <div class="feature-text">
+        <h3>Estimates are never passed off as audited figures</h3>
+        <p>Each line records a separate source status for the transaction, discount, cost and stock: verified, estimated, simulated or not provided. A metric's trust level depends on its weakest input, weighted by line count.</p>
+        <ul class="points">
+          <li>Missing data is not made up. Without a discount column, the paid price is used and revenue reconciles with the source to the penny. Missing stock stays empty, and without categories, products are grouped into families by name.</li>
+          <li>The quality dimensions are completeness, uniqueness, validity, consistency, coverage and contract conformance.</li>
+          <li>Lines left out of the analysis are listed by reason and can be downloaded. Data lineage, import history and the fault drill are on this page too.</li>
+        </ul>
+      </div>
+      <figure>
+        <div class="shot"><img src="../assets/showcase/quality-overview.webp" width="1132" height="961" loading="lazy" alt="Trust Center: quality score, the source status of each data field, quality dimensions and the lines left out of the analysis"></div>
+      </figure>
+    </div>
+  </section>
+
+  <section id="validation" aria-labelledby="validation-title">
+    <p class="chapter">Real-data test</p>
+    <h2 id="validation-title">Run on a real ledger of 1.06 million lines</h2>
+    <p class="section-lede">Demo data is clean; real ledgers are not. For 2.0, the public UCI Online Retail II dataset went through the whole process: uploaded and imported in a real browser, then checked page by page. Apart from the last two, the numbers below come from that run.</p>
+    <div class="stats">
+      <div class="stat"><b>1,067,371</b><span>transaction lines, with both yearly sheets read together</span></div>
+      <div class="stat"><b class="gold">£0.00</b><span>reconciliation gap: net revenue plus set-aside lines equals the deduplicated source file</span></div>
+      <div class="stat"><b class="aqua">0.58%</b><span>of lines set aside as problems, available to download, while the file still imported</span></div>
+      <div class="stat"><b>&lt; 0.6 s</b><span>for a repeat visit to any of the 17 pages after the import, all without errors</span></div>
+      <div class="stat"><b>6.5%</b><span>rolling-backtest error (WAPE) of the revenue forecast, 55% better than repeating last month</span></div>
+      <div class="stat"><b>0.79</b><span>out-of-time AUC of the churn model, trained on older data and scored on the next 90 days</span></div>
+      <div class="stat"><b>132</b><span>countries and regions recognised, including spellings such as EIRE and RSA</span></div>
+      <div class="stat"><b>250</b><span>automated tests with 93% coverage, run on Python 3.11 and 3.13</span></div>
+    </div>
+    <h3 style="margin:40px 0 14px;font-size:1.22rem">Problems the real data exposed</h3>
+    <p class="section-lede" style="margin-bottom:18px">These problems show up only on real data. All of them are fixed now and covered by regression tests.</p>
+    <div class="table-scroll">
+      <table class="lessons">
+        <thead><tr><th scope="col">Situation</th><th scope="col">Before</th><th scope="col">Now</th></tr></thead>
+        <tbody>
+          <tr><td>No discount column in the source</td><td class="before">A 3% discount was invented, leaving net revenue £565.6K short of the source</td><td class="after">The paid price is used, and revenue reconciles to the penny</td></tr>
+          <tr><td>Thousands of zero-price lines</td><td class="before">The whole file was refused</td><td class="after">Problem lines are set aside and can be downloaded, and the file imports once you confirm</td></tr>
+          <tr><td>Two price lists for one product</td><td class="before">Web and wholesale prices were mixed, pulling the elasticity to −0.16</td><td class="after">Each sales channel is tracked on its own, giving −0.96</td></tr>
+          <tr><td>Postage and marketplace fees</td><td class="before">Counted as merchandise sales, with Amazon fees recorded as £221.5K of refunds</td><td class="after">Listed separately as non-merchandise lines</td></tr>
+          <tr><td>No stock in the source</td><td class="before">Stock levels were invented and raised restocking alerts</td><td class="after">Nothing is invented; demand analysis only</td></tr>
+          <tr><td>A large order placed and cancelled on the same day</td><td class="before">80,995 units read as a daily demand of 900</td><td class="after">Demand is counted net of returns</td></tr>
+          <tr><td>Opening the Action Center</td><td class="before">Every visit wrote to the warehouse and cleared every cache, so pages took 5 seconds to load</td><td class="after">It writes only when something changed, and repeat visits take under 0.6 seconds</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="limits" aria-labelledby="limits-title">
+    <p class="chapter">Methods and limits</p>
+    <h2 id="limits-title">What it does well, and where to be careful</h2>
+    <div class="cards">
+      <div class="card">
+        <h3>What you can rely on</h3>
+        <ul>
+          <li>Net revenue, returns and the profit bridge come from the ledger of signed amounts and reconcile to the penny.</li>
+          <li>Every metric states its source and trust level.</li>
+          <li>The forecasting and churn models are used only after a backtest or out-of-time validation.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>What needs checking</h3>
+        <ul>
+          <li>Price elasticity comes from observational data, not a randomised experiment. On the demo data the estimates lean toward zero, and recommendations to raise prices may overstate the gain.</li>
+          <li>Without cost data, profit is estimated by rule and shows the direction only.</li>
+          <li>Default business targets are generated by rules and are not an approved budget.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>What a deployment still needs</h3>
+        <ul>
+          <li>The access code is one shared gate. A company deployment also needs user accounts and permission management.</li>
+          <li>Local backups do not replace off-site backups.</li>
+          <li>The six languages other than Chinese and English translate navigation only.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="section-lede" style="margin-top:22px">The <a href="https://github.com/zhao-yushen/InsightFlow-Analytics/blob/main/docs/methodology.md">methodology</a> sets out each model's approach, assumptions and limits.</p>
+  </section>
+
+  <section id="engineering" aria-labelledby="engineering-title">
+    <p class="chapter">Technology and engineering</p>
+    <h2 id="engineering-title">How it is built</h2>
+    <div class="cards">
+      <div class="card">
+        <h3>Stack</h3>
+        <p>Python, pandas, NumPy and SQLite handle the data and models; Streamlit and Plotly handle the interface. The money river, globe, metric strip and simulation distribution are drawn by hand in Canvas and SVG, without external libraries, so the app can run fully offline.</p>
+      </div>
+      <div class="card">
+        <h3>Quality</h3>
+        <p>250 automated tests cover rendering and the main click paths on all 17 pages, with 93% coverage. CI runs the tests, Ruff, Bandit and pip-audit on Python 3.11 and 3.13.</p>
+      </div>
+      <div class="card">
+        <h3>Accessibility</h3>
+        <p>Every chart can be switched to a table. Animations follow the system's reduced-motion setting, the money river and globe work from the keyboard, and the palette was checked so that colour-blind viewers can tell the colours apart.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="start" aria-labelledby="start-title">
+    <p class="chapter">Get started</p>
+    <h2 id="start-title">Run it on your own computer</h2>
+    <p class="section-lede">InsightFlow needs Python 3.10 or later. On Windows you can also double-click <code>run_windows.bat</code>. The first launch generates demo data, which takes about 15 seconds, and the default address is <code>http://127.0.0.1:8501</code>. To switch the interface to English, pick it under "语言 / Language" in the sidebar.</p>
+    <pre><code>git clone https://github.com/zhao-yushen/InsightFlow-Analytics.git
+cd InsightFlow-Analytics
+python -m venv .venv
+.venv\Scripts\activate
+pip install -e .
+insightflow run</code></pre>
+  </section>
+
+  <footer>
+    <p>Designed and built by Zhao Yushen. MIT License.</p>
+    <p>Screenshots and animations use reproducible simulated data and do not represent any real company's results. The data import section shows the public UCI Online Retail II dataset. Screenshots show the Chinese interface.</p>
+  </footer>
+</div>
+</body>
+</html>

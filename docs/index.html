@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>InsightFlow 2.0</title>
-<meta name="description" content="InsightFlow 是一个零售经营分析与决策平台：把交易数据变成一条看得见的资金流，解释利润为什么变，并在做决定之前先模拟结果。已在 106 万行的真实账本上完整验证。">
+<meta name="description" content="InsightFlow 是一个零售经营分析与决策平台：把交易数据变成一条看得见的资金流，解释利润为什么变，并在做决定之前先模拟结果。已在 106 万行的真实公开账本上测试过导入、对账和全部页面。">
+<link rel="alternate" hreflang="en" href="en/">
 <style>
 @font-face {
   font-family: "Sora";
@@ -48,11 +49,13 @@ img { display: block; max-width: 100%; height: auto; }
   background: rgba(10, 31, 61, .9); backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--grid);
 }
-.toc .wrap { display: flex; align-items: center; gap: 14px; height: 56px; overflow-x: auto; scrollbar-width: none; }
-.toc .wrap::-webkit-scrollbar { display: none; }
+.toc .wrap { display: flex; align-items: center; gap: 14px; height: 56px; }
+.toc .links { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; height: 100%; padding: 0 4px; overflow-x: auto; scrollbar-width: none; }
+.toc .links::-webkit-scrollbar { display: none; }
 .toc b { font-weight: 700; white-space: nowrap; margin-right: 6px; }
 .toc a { color: var(--ink-soft); text-decoration: none; font-size: .86rem; white-space: nowrap; }
 .toc a:hover { color: var(--ink); }
+.toc a.lang { flex: none; padding-left: 14px; border-left: 1px solid var(--line); color: var(--flow); }
 
 /* Hero */
 header.hero { padding: 64px 0 34px; }
@@ -160,20 +163,23 @@ footer p { margin: 4px 0; }
 <nav class="toc" aria-label="页面目录">
   <div class="wrap">
     <b>InsightFlow 2.0</b>
-    <a href="#pipeline">工作方式</a>
-    <a href="#overview">资金流</a>
-    <a href="#profit">利润</a>
-    <a href="#markets">市场</a>
-    <a href="#customers">客户</a>
-    <a href="#products">商品与库存</a>
-    <a href="#pricing">定价</a>
-    <a href="#decisions">决策</a>
-    <a href="#experiments">实验</a>
-    <a href="#operations">诊断与行动</a>
-    <a href="#import">数据接入</a>
-    <a href="#trust">可信度</a>
-    <a href="#validation">真实验证</a>
-    <a href="#start">开始使用</a>
+    <div class="links">
+      <a href="#pipeline">工作方式</a>
+      <a href="#overview">资金流</a>
+      <a href="#profit">利润</a>
+      <a href="#markets">市场</a>
+      <a href="#customers">客户</a>
+      <a href="#products">商品与库存</a>
+      <a href="#pricing">定价</a>
+      <a href="#decisions">决策</a>
+      <a href="#experiments">实验</a>
+      <a href="#operations">诊断与行动</a>
+      <a href="#import">数据接入</a>
+      <a href="#trust">可信度</a>
+      <a href="#validation">真实验证</a>
+      <a href="#start">开始使用</a>
+    </div>
+    <a class="lang" href="en/" hreflang="en" lang="en">English</a>
   </div>
 </nav>
 
@@ -183,9 +189,9 @@ footer p { margin: 4px 0; }
     <h1>InsightFlow <span>2.0</span></h1>
     <p class="lede">一个零售经营分析与决策平台。导入一份销售明细，它会把钱从哪里来、在哪里流失画成一条资金流，解释利润为什么变了，指出哪些问题值得处理，并在你调价、做促销或调整营销之前，先把可能的结果模拟出来。</p>
     <ul class="facts">
-      <li><b>106 万行</b>真实账本完整验证</li>
+      <li><b>106 万行</b>真实账本导入实测</li>
       <li><b>17 个</b>分析页面</li>
-      <li><b>249 项</b>自动化测试</li>
+      <li><b>250 项</b>自动化测试</li>
       <li><b>离线运行</b>，动画组件不依赖外部库</li>
     </ul>
     <div class="actions">
@@ -209,7 +215,7 @@ footer p { margin: 4px 0; }
   <section id="pipeline" aria-labelledby="pipeline-title">
     <p class="chapter">工作方式</p>
     <h2 id="pipeline-title">一份明细是怎么变成决策的</h2>
-    <p class="section-lede">InsightFlow 不是一组各自为政的图表。所有页面读同一个带签名的账本：退货是负数的反向记录，任何维度的汇总都已经扣除退货；每一行都记着数据来自哪里，指标的可信度由它最弱的输入决定。</p>
+    <p class="section-lede">所有页面读同一本带正负号的账本：退货记成负数的反向记录，所以任何维度的汇总都已经扣除退货；每一行都记着数据来自哪里，指标的可信度由它最弱的输入决定。</p>
     <div class="pipeline">
       <svg viewBox="0 0 1120 120" role="img" aria-label="数据流程：接入、校验、清洗、仓库、分析、决策、交付">
         <defs>
@@ -248,16 +254,16 @@ footer p { margin: 4px 0; }
   <section id="overview" aria-labelledby="overview-title">
     <p class="chapter">经营总览</p>
     <h2 id="overview-title">钱去了哪里，一眼看清</h2>
-    <p class="section-lede">总览页开头先用一句话说清本期发生了什么，比如“净销售额比上期多 £290.6K，利润最大的助力是销量规模，最大的拖累是折扣力度”。下面的每张图都在为这句话提供依据。</p>
+    <p class="section-lede">总览页开头先用一句话说清本期发生了什么，比如“净销售额比上期多 £290.6K，利润最大的助力是销量规模，最大的拖累是折扣力度”。下面的图表给出这句话的依据。</p>
 
     <div class="feature">
       <div class="feature-text">
         <h3>资金河：把利润表画成一条河</h3>
         <p>河的起点是商品毛额。往右流的过程中，折扣、退款、商品成本、物流、支付、营销和退货处理依次分流出去，每条支流的宽度就是它的金额，最后剩下的就是贡献利润。</p>
         <ul class="points">
-          <li><b>点击任意一项流出</b>，下方立刻展开它来自哪些品类和哪些市场，还能看到占销售额的比率与基准期相比变了多少。</li>
+          <li><b>点击任意一项流出</b>，下方会展开它按品类和按市场的明细，以及它占销售额的比例相比基准期变了多少。</li>
           <li><b>指标条</b>显示净销售额、贡献利润、利润率、订单、客户和退货率，每一项都标出相对基准期的变化，并附上近 12 个月的走势。</li>
-          <li><b>基准期可选</b>：上一周期，或去年同期。零售是季节性的，十二月和上一个季度比，往往会把旺季误读成增长。</li>
+          <li><b>基准期可选</b>：上一周期，或去年同期。零售有季节性，十二月和上一个季度比，往往会把旺季误读成增长。</li>
         </ul>
       </div>
       <figure>
@@ -301,9 +307,9 @@ footer p { margin: 4px 0; }
         <h3>价格、销量、结构、成本桥接</h3>
         <p>利润变化最容易被说成“卖得好”或“成本高”。桥接把变化拆成互不重叠的几块：销量规模、商品结构、标价变化、折扣力度、单位成本、新增商品、停售商品、物流、支付、营销和退货。</p>
         <ul class="points">
-          <li><b>各项相加等于实际变化</b>，图下标出未解释差额，测试要求它精确到分。</li>
+          <li><b>各项相加等于实际变化</b>，未解释差额单独标在图下，演示数据上是 £0.00。</li>
           <li><b>结构</b>单独成项：卖得多的如果是低利润商品，总销量涨了，利润照样可能跌。</li>
-          <li><b>上方的瀑布图</b>回答“钱去了哪里”，从商品毛额一路扣到贡献利润。</li>
+          <li><b>另一张瀑布图</b>回答“钱去了哪里”，从商品毛额一路扣到贡献利润。</li>
         </ul>
       </div>
       <div>
@@ -312,7 +318,7 @@ footer p { margin: 4px 0; }
         </figure>
         <figure style="margin-top:18px">
           <div class="shot"><img src="assets/showcase/profit-flow.webp" width="1132" height="573" loading="lazy" alt="本期从商品毛额到贡献利润的瀑布图"></div>
-          <figcaption>上：基准期到本期的利润桥接，未解释差额 £0.00。下：本期从毛额到贡献利润。</figcaption>
+          <figcaption>上：基准期到本期的利润桥接。下：本期从毛额到贡献利润。</figcaption>
         </figure>
       </div>
     </div>
@@ -370,7 +376,7 @@ footer p { margin: 4px 0; }
         <p>客户先按最近一次购买、购买频次和金额分成冠军、忠诚、成长、潜力、风险和沉睡几类。流失模型预测每位客户未来 90 天会不会回购。</p>
         <ul class="points">
           <li><b>跨期验证</b>：用较早的数据训练，用之后 90 天的真实结果打分。AUC 低于 0.60 时页面会说明，并改用可解释的规则分数。</li>
-          <li><b>校准图</b>展示预测概率和实际回购率是否一致，点越靠近对角线，概率越能直接读。</li>
+          <li><b>校准图</b>展示预测概率和实际回购率是否一致，点越靠近对角线，预测概率越能按字面理解。</li>
           <li><b>优先联系名单</b>按“预期利润 × 流失风险”排序，并给出召回、自动触达或交叉销售的建议。</li>
           <li><b>覆盖范围写明</b>：匿名订单不在客户分析内，页面会标出带客户编号的订单占多少销售额。</li>
         </ul>
@@ -395,7 +401,7 @@ footer p { margin: 4px 0; }
         <h3>集中度与连带购买</h3>
         <p>累计收入曲线显示收入有多依赖头部商品，按全部商品计算，而不是只算前几百个。商品效率地图把销售额和贡献利润率放在一起，标出卖得多但赚得少的商品。</p>
         <ul class="points">
-          <li><b>连带购买</b>用提升度衡量：提升度为 2，代表两件商品同时出现的次数是巧合的两倍。</li>
+          <li><b>连带购买</b>用提升度衡量：提升度为 2，代表两件商品一起出现的次数是随机搭配时的两倍。</li>
           <li>至少要有 8 笔共同订单才会列出，避免把偶然当规律。</li>
         </ul>
       </div>
@@ -433,10 +439,10 @@ footer p { margin: 4px 0; }
         <p>每个品类做一次泊松回归：每周订单数对实际售价，同时扣除每个商品本身的受欢迎程度和每一周的季节影响，所以旺季和爆款不会被误当成价格效应。</p>
         <ul class="points">
           <li><b>按销售渠道分别跟踪</b>：同一商品在网店和批发渠道常用不同价目表，混在一起会把渠道比例的变化误当成价格变化。</li>
-          <li><b>误差按商品聚类</b>，再向品类先验收缩：数据少的品类贴近行业假设，数据多的品类由数据说话，每一行都标明是哪一种。</li>
+          <li><b>误差按商品聚类</b>，再向品类先验收缩：数据少的品类贴近行业假设，数据多的品类主要由数据决定，每一行都标明是哪一种。</li>
           <li><b>每条调价建议</b>都给出弹性 95% 区间两端的利润变化，只有在不利的一端仍然赚钱时才算稳健。</li>
         </ul>
-        <p class="note">价格不是随机实验，估计只在历史价格附近可靠。页面会建议先用 A/B 实验验证，再全量调价。</p>
+        <p class="note">历史价格不是随机设定的，估计只在历史价格附近可靠。页面会建议先用 A/B 实验验证，再全量调价。</p>
       </div>
       <div>
         <figure>
@@ -598,7 +604,7 @@ footer p { margin: 4px 0; }
   <section id="validation" aria-labelledby="validation-title">
     <p class="chapter">真实数据验证</p>
     <h2 id="validation-title">在 106 万行真实账本上跑过一遍</h2>
-    <p class="section-lede">演示数据是干净的，真实账本不是。2.0 用公开的 UCI Online Retail II 数据集完整跑了一遍：在真实浏览器里上传、导入，再逐页检查。下面的数字都来自那次运行。</p>
+    <p class="section-lede">演示数据是干净的，真实账本不是。2.0 用公开的 UCI Online Retail II 数据集完整跑了一遍：在真实浏览器里上传、导入，再逐页检查。除最后两项外，下面的数字都来自那次运行。</p>
     <div class="stats">
       <div class="stat"><b>1,067,371</b><span>行交易，两个年度工作表一起读入</span></div>
       <div class="stat"><b class="gold">£0.00</b><span>对账差额：净销售额加隔离行金额，等于去重后的源文件</span></div>
@@ -607,10 +613,10 @@ footer p { margin: 4px 0; }
       <div class="stat"><b>6.5%</b><span>收入预测的滚动回测误差（WAPE），比沿用上月准 55%</span></div>
       <div class="stat"><b>0.79</b><span>流失模型跨期 AUC，用旧数据训练、用之后 90 天打分</span></div>
       <div class="stat"><b>132</b><span>个国家和地区可识别，包括 EIRE、RSA 这样的写法</span></div>
-      <div class="stat"><b>249</b><span>项自动化测试，覆盖率 93%，在 Python 3.11 和 3.13 上运行</span></div>
+      <div class="stat"><b>250</b><span>项自动化测试，覆盖率 93%，在 Python 3.11 和 3.13 上运行</span></div>
     </div>
     <h3 style="margin:40px 0 14px;font-size:1.22rem">真实数据暴露的问题</h3>
-    <p class="section-lede" style="margin-bottom:18px">下面这些问题只有在真实数据上跑过才会出现，现在都已修复，并有回归测试守住。</p>
+    <p class="section-lede" style="margin-bottom:18px">下面这些问题只在真实数据上出现，现在都已修复，并加了回归测试。</p>
     <div class="table-scroll">
       <table class="lessons">
         <thead><tr><th scope="col">情形</th><th scope="col">之前</th><th scope="col">现在</th></tr></thead>
@@ -634,7 +640,7 @@ footer p { margin: 4px 0; }
       <div class="card">
         <h3>可以放心依赖的</h3>
         <ul>
-          <li>净销售额、退货和利润桥接按签名账本计算，逐分对账。</li>
+          <li>净销售额、退货和利润桥接按带正负号的账本计算，逐分对账。</li>
           <li>每个指标都标明来源和可信度。</li>
           <li>预测和流失模型都经过回测或跨期验证才会使用。</li>
         </ul>
@@ -669,7 +675,7 @@ footer p { margin: 4px 0; }
       </div>
       <div class="card">
         <h3>质量保障</h3>
-        <p>249 项自动化测试覆盖全部 17 个页面的渲染和关键点击路径，覆盖率 93%。CI 在 Python 3.11 和 3.13 上运行 Ruff、Bandit 和 pip-audit。</p>
+        <p>250 项自动化测试覆盖全部 17 个页面的渲染和关键点击路径，覆盖率 93%。CI 在 Python 3.11 和 3.13 上运行测试、Ruff、Bandit 和 pip-audit。</p>
       </div>
       <div class="card">
         <h3>可访问性</h3>

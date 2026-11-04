@@ -13,6 +13,8 @@ Recorded on 3 November 2026 on Windows 11, on branch `feat/platform-v2`.
 | Bandit, high severity | Passed |
 | pip-audit | No known vulnerabilities |
 
+A regression test for the disabled-button style was added after this record. On 4 November 2026, CI on `main` at commit `7a4800a` ran 250 tests on Python 3.11 and 3.13; all passed, with 93.30% coverage.
+
 Tests render all 17 pages on the demo warehouse and on a bare ledger with no costs, stock or categories. They also cover these click paths: importing a GBK file, setting problem rows aside, refusing a mostly broken file, saving actions, running the fault drill, importing an experiment, asking the assistant, the access code, shared links and a half-picked date range.
 
 ## Real data: UCI Online Retail II
