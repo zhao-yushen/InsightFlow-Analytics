@@ -23,19 +23,12 @@
   <div class="wrap">
     <b>InsightFlow 2.0</b>
     <div class="links">
+      <a href="#tour">产品演示</a>
       <a href="#pipeline">工作方式</a>
-      <a href="#overview">资金流</a>
-      <a href="#profit">利润</a>
-      <a href="#markets">市场</a>
-      <a href="#customers">客户</a>
-      <a href="#products">商品与库存</a>
-      <a href="#pricing">定价</a>
-      <a href="#decisions">决策</a>
-      <a href="#experiments">实验</a>
-      <a href="#operations">诊断与行动</a>
-      <a href="#import">数据接入</a>
-      <a href="#trust">可信度</a>
-      <a href="#validation">真实验证</a>
+      <a href="#part-see">看见经营</a>
+      <a href="#part-understand">理解原因</a>
+      <a href="#part-decide">做出决策</a>
+      <a href="#part-trust">信任数据</a>
       <a href="#start">开始使用</a>
     </div>
     <a class="lang" href="en/" hreflang="en" lang="en">English</a>
@@ -57,8 +50,8 @@
         <li><b>离线运行</b>，动画组件不依赖外部库</li>
       </ul>
       <div class="actions">
-        <a class="button primary" href="https://github.com/zhao-yushen/InsightFlow-Analytics">查看源代码</a>
-        <a class="button" href="#start">本地运行</a>
+        <a class="button primary" href="#tour">观看演示</a>
+        <a class="button" href="https://github.com/zhao-yushen/InsightFlow-Analytics">查看源代码</a>
         <a class="button" href="https://github.com/zhao-yushen/InsightFlow-Analytics/blob/main/docs/validation.md">验证记录</a>
         <a class="button" href="https://github.com/zhao-yushen/InsightFlow-Analytics/releases/tag/v2.0.0">发布说明</a>
       </div>
@@ -67,15 +60,30 @@
 </div>
 
 <div class="wrap">
-  <figure class="hero-shot">
-    <div class="shot">
-      <picture>
-        <source srcset="assets/showcase/overview-river.webp" media="(prefers-reduced-motion: reduce)">
-        <img src="assets/showcase/river-flow.webp" width="1066" height="412" alt="资金河动画：商品毛额从左向右流动，折扣、退款、商品成本、物流、支付、营销和退货处理依次分流出去，最后留下贡献利润">
-      </picture>
-    </div>
-    <figcaption><span class="motion-label">动图</span>资金河。河道的宽度就是金额，每一条向下分出的支流是一项流出，流到最右边剩下的就是贡献利润。截图和动图都使用可复现的模拟演示数据。</figcaption>
-  </figure>
+  <section id="tour" class="tour" aria-labelledby="tour-title">
+    <p class="chapter">产品演示</p>
+    <h2 id="tour-title">一分钟看完整个产品</h2>
+    <p class="section-lede">这段演示录自本地运行的应用，依次经过资金流钻取、利润桥接、全球市场、定价、风险模拟、问答助手和信任中心。点下方的章节可以直接跳到对应位置。</p>
+    <figure class="film hero-shot" data-film>
+      <div class="shot film-frame">
+        <video class="film-video" width="1280" height="720" preload="none" playsinline controls poster="assets/video/tour.webp" aria-label="InsightFlow 产品演示，约 57 秒，无声">
+          <source src="assets/video/tour.mp4" type="video/mp4">
+        </video>
+        <button class="film-play" type="button" hidden><span class="film-icon" aria-hidden="true"></span><span>播放演示</span><small>57 秒 · 无声</small></button>
+        <p class="film-caption" aria-hidden="true"></p>
+      </div>
+      <ol class="film-chapters">
+        <li><button type="button" data-at="0" data-note="点击商品成本，展开它按品类和市场的明细"><span>01</span>资金流钻取</button></li>
+        <li><button type="button" data-at="7.9" data-note="从资金去向滚动到利润桥接，逐项查看变化"><span>02</span>利润桥接</button></li>
+        <li><button type="button" data-at="14.3" data-note="拖动地球仪，比较各市场的规模和利润率"><span>03</span>全球市场</button></li>
+        <li><button type="button" data-at="22.2" data-note="先看各品类的弹性估计，再看调价建议"><span>04</span>定价</button></li>
+        <li><button type="button" data-at="28.7" data-note="上调价格后，几千种可能的结果重新落下"><span>05</span>风险模拟</button></li>
+        <li><button type="button" data-at="39.3" data-note="用日常语言提问，答案附带数据和计算方法"><span>06</span>问答助手</button></li>
+        <li><button type="button" data-at="48.3" data-note="查看质量维度和未计入分析的行"><span>07</span>信任中心</button></li>
+      </ol>
+      <figcaption>录自本地运行的演示仓库，画面中的数据都是可复现的模拟数据。</figcaption>
+    </figure>
+  </section>
 
   <section id="pipeline" aria-labelledby="pipeline-title">
     <p class="chapter">工作方式</p>
@@ -120,387 +128,474 @@
     </div>
   </section>
 
-  <section id="overview" aria-labelledby="overview-title">
-    <p class="chapter">经营总览</p>
-    <h2 id="overview-title">钱去了哪里，一眼看清</h2>
-    <p class="section-lede">总览页开头先用一句话说清本期发生了什么，比如“净销售额比上期多 £290.6K，利润最大的助力是销量规模，最大的拖累是折扣力度”。下面的图表给出这句话的依据。</p>
+  <div class="part" id="part-see">
+    <header class="part-head">
+      <p class="part-index">第 1 部分</p>
+      <h2 class="part-title">看见经营</h2>
+      <p class="part-lede">钱从哪里来、流向哪里，哪些市场在赚钱。</p>
+      <ol class="part-map">
+        <li><a href="#overview"><span>1.1</span>经营总览</a></li>
+        <li><a href="#profit"><span>1.2</span>利润与单位经济</a></li>
+        <li><a href="#markets"><span>1.3</span>全球市场</a></li>
+      </ol>
+    </header>
 
-    <div class="feature">
-      <div class="feature-text">
-        <h3>资金河：把利润表画成一条河</h3>
-        <p>河的起点是商品毛额。往右流的过程中，折扣、退款、商品成本、物流、支付、营销和退货处理依次分流出去，每条支流的宽度就是它的金额，最后剩下的就是贡献利润。</p>
-        <ul class="points">
-          <li><b>点击任意一项流出</b>，下方会展开它按品类和按市场的明细，以及它占销售额的比例相比基准期变了多少。</li>
-          <li><b>指标条</b>显示净销售额、贡献利润、利润率、订单、客户和退货率，每一项都标出相对基准期的变化，并附上近 12 个月的走势。</li>
-          <li><b>基准期可选</b>：上一周期，或去年同期。零售有季节性，十二月和上一个季度比，往往会把旺季误读成增长。</li>
-        </ul>
-      </div>
-      <figure>
-        <div class="shot">
-          <picture>
-            <source srcset="assets/showcase/overview-drilldown.webp" media="(prefers-reduced-motion: reduce)">
-            <img src="assets/showcase/drilldown.webp" width="1132" height="1292" loading="lazy" alt="钻取动图：点击商品成本这一支流后，下方展开按品类和按市场的成本明细表">
-          </picture>
+    <section id="overview" aria-labelledby="overview-title">
+      <p class="chapter">经营总览</p>
+      <h2 id="overview-title">钱去了哪里，一眼看清</h2>
+      <p class="section-lede">总览页开头先用一句话说清本期发生了什么，比如“净销售额比上期多 £290.6K，利润最大的助力是销量规模，最大的拖累是折扣力度”。下面的图表给出这句话的依据。</p>
+
+      <div class="feature">
+        <div class="feature-text">
+          <h3>资金河：把利润表画成一条河</h3>
+          <p>河的起点是商品毛额。往右流的过程中，折扣、退款、商品成本、物流、支付、营销和退货处理依次分流出去，每条支流的宽度就是它的金额，最后剩下的就是贡献利润。</p>
+          <ul class="points">
+            <li><b>点击任意一项流出</b>，下方会展开它按品类和按市场的明细，以及它占销售额的比例相比基准期变了多少。</li>
+            <li><b>指标条</b>显示净销售额、贡献利润、利润率、订单、客户和退货率，每一项都标出相对基准期的变化，并附上近 12 个月的走势。</li>
+            <li><b>基准期可选</b>：上一周期，或去年同期。零售有季节性，十二月和上一个季度比，往往会把旺季误读成增长。</li>
+          </ul>
         </div>
-        <figcaption><span class="motion-label">动图</span>点击“商品成本”，展开按品类和按市场的明细。</figcaption>
-      </figure>
-    </div>
-
-    <div class="feature reverse">
-      <div class="feature-text">
-        <h3>趋势、信号和前瞻</h3>
-        <p>趋势图展示近两年的净销售额、毛利润和贡献利润。还没结束的月份用虚线画出，因为天数不够的月份看起来总像是在下跌。</p>
-        <ul class="points">
-          <li><b>值得处理的问题</b>按 P0 到 P3 排序，例如利润承压、退货率上升、补货风险，每条都附带证据。</li>
-          <li><b>未来三个月的贡献利润</b>以 80% 和 95% 区间展示，区间越宽代表越不确定。</li>
-          <li><b>目标完成度</b>逐项列出。默认目标由近三个月均值加规则增幅生成，并非已批准的预算，页面会写明这一点。</li>
-        </ul>
-      </div>
-      <div>
-        <figure>
-          <div class="shot"><img src="assets/showcase/overview-signals.webp" width="1132" height="497" loading="lazy" alt="趋势与信号：月度趋势线，以及按优先级排列的待处理问题"></div>
-        </figure>
-        <figure style="margin-top:18px">
-          <div class="shot"><img src="assets/showcase/overview-outlook.webp" width="1132" height="614" loading="lazy" alt="前瞻与目标：贡献利润预测扇形图，以及本月目标完成度"></div>
-          <figcaption>上：趋势与问题信号。下：预测区间与目标完成度。</figcaption>
-        </figure>
-      </div>
-    </div>
-  </section>
-
-  <section id="profit" aria-labelledby="profit-title">
-    <p class="chapter">利润与单位经济</p>
-    <h2 id="profit-title">利润为什么变了，拆到每一分钱</h2>
-    <div class="feature">
-      <div class="feature-text">
-        <h3>价格、销量、结构、成本桥接</h3>
-        <p>利润变化最容易被说成“卖得好”或“成本高”。桥接把变化拆成互不重叠的几块：销量规模、商品结构、标价变化、折扣力度、单位成本、新增商品、停售商品、物流、支付、营销和退货。</p>
-        <ul class="points">
-          <li><b>各项相加等于实际变化</b>，未解释差额单独标在图下，演示数据上是 £0.00。</li>
-          <li><b>结构</b>单独成项：卖得多的如果是低利润商品，总销量涨了，利润照样可能跌。</li>
-          <li><b>另一张瀑布图</b>回答“钱去了哪里”，从商品毛额一路扣到贡献利润。</li>
-        </ul>
-      </div>
-      <div>
-        <figure>
-          <div class="shot"><img src="assets/showcase/profit-bridge.webp" width="1132" height="649" loading="lazy" alt="利润桥接瀑布图：从基准期利润出发，经过销量规模、商品结构、折扣力度等各项变化，到本期利润"></div>
-        </figure>
-        <figure style="margin-top:18px">
-          <div class="shot"><img src="assets/showcase/profit-flow.webp" width="1132" height="573" loading="lazy" alt="本期从商品毛额到贡献利润的瀑布图"></div>
-          <figcaption>上：基准期到本期的利润桥接。下：本期从毛额到贡献利润。</figcaption>
-        </figure>
-      </div>
-    </div>
-  </section>
-
-  <section id="markets" aria-labelledby="markets-title">
-    <p class="chapter">全球市场</p>
-    <h2 id="markets-title">哪个市场在赚钱</h2>
-    <div class="feature reverse">
-      <div class="feature-text">
-        <h3>一个可以拖着转的地球仪</h3>
-        <p>每个市场是一个气泡，大小代表净销售额。青色表示利润率高于整体，珊瑚色表示低于整体，一眼就能看出“规模大但不赚钱”的市场。</p>
-        <ul class="points">
-          <li><b>拖动</b>旋转地球，<b>点击</b>气泡打开这个市场的详情：规模、利润率、退货率和它的主要品类。</li>
-          <li><b>键盘也能操作</b>：左右方向键旋转，上下方向键在市场之间切换，回车打开详情。</li>
-          <li><b>能识别 132 个国家和地区</b>，包括 EIRE、RSA、USA 这类导出文件里常见的写法，以及中文名和 ISO 代码。</li>
-        </ul>
-      </div>
-      <figure>
-        <div class="shot center">
-          <picture>
-            <source srcset="assets/showcase/markets-globe.webp" media="(prefers-reduced-motion: reduce)">
-            <img src="assets/showcase/globe-turn.webp" width="581" height="528" loading="lazy" alt="地球仪动图：拖动旋转一整圈，欧洲、亚洲和美洲的市场气泡依次转到正面">
-          </picture>
+        <div class="viewer" data-viewer>
+          <figure class="panel" data-tab="钻取演示" data-kind="video">
+            <div class="shot"><video class="clip" width="1280" height="720" muted loop playsinline preload="none" controls poster="assets/video/clip-overview.webp" aria-label="钻取演示：点击商品成本，展开按品类和按市场的明细"><source src="assets/video/clip-overview.mp4" type="video/mp4"></video></div>
+            <figcaption>点击“商品成本”，下方展开它按品类和按市场的明细。</figcaption>
+          </figure>
+          <figure class="panel" data-tab="资金河全图">
+            <div class="shot"><img src="assets/showcase/overview-river.webp" width="1132" height="901" loading="lazy" alt="经营总览页：开头的一句话总结和资金河"></div>
+            <figcaption>河道的宽度就是金额，流到最右边剩下的是贡献利润。</figcaption>
+          </figure>
         </div>
-        <figcaption><span class="motion-label">动图</span>拖动地球仪转一圈。</figcaption>
-      </figure>
-    </div>
-    <figure class="wide">
-      <div class="shot"><img src="assets/showcase/markets-globe.webp" width="1132" height="815" loading="lazy" alt="全球市场页面：左侧地球仪，右侧各区域净销售额排名"></div>
-      <figcaption>完整页面：右侧是各区域的净销售额排名，下方还有逐个市场的排名表。</figcaption>
-    </figure>
-    <div class="feature">
-      <div class="feature-text">
-        <h3>销售诊断：变化来自哪里</h3>
-        <p>月度趋势可以切换净销售额、订单量、活跃客户和客单价。销售结构按国家、品类和渠道拆开，再列出相对基准期变化最大的维度，最后用星期热力图看销售节奏。</p>
       </div>
-      <div>
-        <figure>
-          <div class="shot"><img src="assets/showcase/sales-trend.webp" width="1132" height="505" loading="lazy" alt="销售诊断：月度净销售额趋势"></div>
-        </figure>
-        <figure style="margin-top:18px">
-          <div class="shot"><img src="assets/showcase/sales-mix.webp" width="1132" height="775" loading="lazy" alt="销售结构：按国家、品类和渠道的净销售额与贡献利润率"></div>
-        </figure>
-      </div>
-    </div>
-  </section>
 
-  <section id="customers" aria-labelledby="customers-title">
-    <p class="chapter">客户价值与流失</p>
-    <h2 id="customers-title">谁最值钱，谁可能不再回来</h2>
-    <div class="feature reverse">
-      <div class="feature-text">
-        <h3>只有通过验证的模型才会被采用</h3>
-        <p>客户先按最近一次购买、购买频次和金额分成冠军、忠诚、成长、潜力、风险和沉睡几类。流失模型预测每位客户未来 90 天会不会回购。</p>
-        <ul class="points">
-          <li><b>跨期验证</b>：用较早的数据训练，用之后 90 天的真实结果打分。AUC 低于 0.60 时页面会说明，并改用可解释的规则分数。</li>
-          <li><b>校准图</b>展示预测概率和实际回购率是否一致，点越靠近对角线，预测概率越能按字面理解。</li>
-          <li><b>优先联系名单</b>按“预期利润 × 流失风险”排序，并给出召回、自动触达或交叉销售的建议。</li>
-          <li><b>覆盖范围写明</b>：匿名订单不在客户分析内，页面会标出带客户编号的订单占多少销售额。</li>
-        </ul>
-      </div>
-      <div>
-        <figure>
-          <div class="shot"><img src="assets/showcase/customers-churn.webp" width="1132" height="671" loading="lazy" alt="流失预测：客户价值与流失风险散点图，以及模型校准曲线"></div>
-        </figure>
-        <figure style="margin-top:18px">
-          <div class="shot"><img src="assets/showcase/customers-segments.webp" width="1132" height="533" loading="lazy" alt="客户分层矩形树图：冠军、忠诚、成长、风险、沉睡和潜力客户的贡献利润"></div>
-          <figcaption>上：价值与风险，以及模型校准。下：各客户层的贡献利润。</figcaption>
-        </figure>
-      </div>
-    </div>
-  </section>
-
-  <section id="products" aria-labelledby="products-title">
-    <p class="chapter">商品与库存</p>
-    <h2 id="products-title">什么好卖、什么一起卖、什么该补货</h2>
-    <div class="feature">
-      <div class="feature-text">
-        <h3>集中度与连带购买</h3>
-        <p>累计收入曲线显示收入有多依赖头部商品，按全部商品计算，而不是只算前几百个。商品效率地图把销售额和贡献利润率放在一起，标出卖得多但赚得少的商品。</p>
-        <ul class="points">
-          <li><b>连带购买</b>用提升度衡量：提升度为 2，代表两件商品一起出现的次数是随机搭配时的两倍。</li>
-          <li>至少要有 8 笔共同订单才会列出，避免把偶然当规律。</li>
-        </ul>
-      </div>
-      <div>
-        <figure>
-          <div class="shot"><img src="assets/showcase/products-concentration.webp" width="1132" height="507" loading="lazy" alt="收入集中度：累计收入曲线和净销售额前十的商品"></div>
-        </figure>
-        <figure style="margin-top:18px">
-          <div class="shot"><img src="assets/showcase/products-basket.webp" width="1132" height="661" loading="lazy" alt="连带购买表：常被一起购买的商品组合、共同订单数、连带率和提升度"></div>
-        </figure>
-      </div>
-    </div>
-    <div class="feature reverse">
-      <div class="feature-text">
-        <h3>按服务水平计算的补货策略</h3>
-        <p>商品按价值（ABC）和需求稳定性（XYZ）分成九类：AX 适合自动补货，AZ 需要人工盯。安全库存由目标服务水平、需求波动和交期波动一起决定。</p>
-        <ul class="points">
-          <li><b>需求按净数计算</b>：当天下单又取消的订单不算需求。</li>
-          <li><b>补货清单</b>列出现有库存、补货线、建议订购量、预计缺货日和缺货会损失的利润，可以直接下载。</li>
-          <li>数据里没有库存字段时，这一页只分析需求，不会编造库存去发补货告警。</li>
-        </ul>
-      </div>
-      <figure>
-        <div class="shot"><img src="assets/showcase/inventory-policy.webp" width="1132" height="943" loading="lazy" alt="补货策略：ABC-XYZ 收入热力图，以及缺货损失最大的商品"></div>
-      </figure>
-    </div>
-  </section>
-
-  <section id="pricing" aria-labelledby="pricing-title">
-    <p class="chapter">定价实验室</p>
-    <h2 id="pricing-title">顾客对价格有多敏感，该不该调价</h2>
-    <div class="feature">
-      <div class="feature-text">
-        <h3>价格弹性从你自己的订单里估计</h3>
-        <p>每个品类做一次泊松回归：每周订单数对实际售价，同时扣除每个商品本身的受欢迎程度和每一周的季节影响，所以旺季和爆款不会被误当成价格效应。</p>
-        <ul class="points">
-          <li><b>按销售渠道分别跟踪</b>：同一商品在网店和批发渠道常用不同价目表，混在一起会把渠道比例的变化误当成价格变化。</li>
-          <li><b>误差按商品聚类</b>，再向品类先验收缩：数据少的品类贴近行业假设，数据多的品类主要由数据决定，每一行都标明是哪一种。</li>
-          <li><b>每条调价建议</b>都给出弹性 95% 区间两端的利润变化，只有在不利的一端仍然赚钱时才算稳健。</li>
-        </ul>
-        <p class="note">历史价格不是随机设定的，估计只在历史价格附近可靠。页面会建议先用 A/B 实验验证，再全量调价。</p>
-      </div>
-      <div>
-        <figure>
-          <div class="shot"><img src="assets/showcase/pricing-elasticity.webp" width="1132" height="892" loading="lazy" alt="价格弹性图：各品类的数据估计、95% 区间和行业假设"></div>
-        </figure>
-        <figure style="margin-top:18px">
-          <div class="shot"><img src="assets/showcase/pricing-moves.webp" width="1132" height="785" loading="lazy" alt="调价建议：各品类预计的贡献利润变化和利润区间"></div>
-          <figcaption>上：各品类的弹性估计与区间。下：建议调价幅度和利润区间。</figcaption>
-        </figure>
-      </div>
-    </div>
-  </section>
-
-  <section id="decisions" aria-labelledby="decisions-title">
-    <p class="chapter">概率决策实验室</p>
-    <h2 id="decisions-title">做决定之前，先看几千种可能的结果</h2>
-    <div class="feature reverse">
-      <div class="feature-text">
-        <h3>一个方案不是一个数字，而是一个分布</h3>
-        <p>调整价格、折扣、营销、采购成本或退货率，系统会抽取 5,000 种可能的未来：价格弹性、营销响应、基础需求、采购成本和物流成本都按看得见的分布变化。</p>
-        <ul class="points">
-          <li><b>落下的每个点</b>是一种可能的结果，左边红色是利润下降，右边青色是利润改善。</li>
-          <li>同时给出利润变化的中位数、较差情形（5%）和较好情形（95%），以及改善概率和“增收但减利”的概率。</li>
-          <li><b>敏感度条形图</b>告诉你结果最受哪个假设影响，值得先把那个假设弄准。</li>
-        </ul>
-      </div>
-      <figure>
-        <div class="shot center">
-          <picture>
-            <source srcset="assets/showcase/decision-simulation.webp" media="(prefers-reduced-motion: reduce)">
-            <img src="assets/showcase/simulation-drop.webp" width="643" height="352" loading="lazy" alt="模拟分布动图：几千个模拟结果像雨点一样落下，堆积成利润变化的分布">
-          </picture>
+      <div class="feature reverse">
+        <div class="feature-text">
+          <h3>趋势、信号和前瞻</h3>
+          <p>趋势图展示近两年的净销售额、毛利润和贡献利润。还没结束的月份用虚线画出，因为天数不够的月份看起来总像是在下跌。</p>
+          <ul class="points">
+            <li><b>值得处理的问题</b>按 P0 到 P3 排序，例如利润承压、退货率上升、补货风险，每条都附带证据。</li>
+            <li><b>未来三个月的贡献利润</b>以 80% 和 95% 区间展示，区间越宽代表越不确定。</li>
+            <li><b>目标完成度</b>逐项列出。默认目标由近三个月均值加规则增幅生成，并非已批准的预算，页面会写明这一点。</li>
+          </ul>
         </div>
-        <figcaption><span class="motion-label">动图</span>修改参数后，模拟结果重新落下，堆成利润变化的分布。</figcaption>
-      </figure>
-    </div>
-    <div class="pair">
-      <figure>
-        <div class="shot"><img src="assets/showcase/decision-simulation.webp" width="1132" height="1284" loading="lazy" alt="风险模拟页面：方案参数、利润变化分布和敏感度"></div>
-        <figcaption>风险模拟：参数、分布、关键数字和敏感度在同一屏。</figcaption>
-      </figure>
-      <figure>
-        <div class="shot"><img src="assets/showcase/decision-frontier.webp" width="1132" height="1405" loading="lazy" alt="自动寻优：数百个方案在收益与风险平面上的位置，以及推荐方案"></div>
-        <figcaption>自动寻优：所有价格、折扣和营销组合面对同一批模拟未来，在收益与风险之间找出最优边界。</figcaption>
-      </figure>
-    </div>
-  </section>
-
-  <section id="experiments" aria-labelledby="experiments-title">
-    <p class="chapter">A/B 实验分析</p>
-    <h2 id="experiments-title">这次实验能下结论吗</h2>
-    <div class="feature">
-      <div class="feature-text">
-        <h3>证据不够时，结论就是“证据不足”</h3>
-        <p>实验不只看转化率，还看收入、利润和退货。每个指标都给出 95% 区间，结论按证据分为推广、试点、证据不足和停止四种。</p>
-        <ul class="points">
-          <li><b>推广</b>要求利润区间整体在 0 以上；<b>停止</b>对应利润明显下降或退货超过护栏。</li>
-          <li><b>分组检查</b>发现对照组和实验组人数失衡时会报警，这通常说明分流出了问题。</li>
-          <li><b>样本够不够</b>：给出最小可检测提升和所需样本量，说明这次实验本来能不能发现有意义的效果。</li>
-          <li>可以导入真实实验的客户级结果；演示实验只在模拟仓库里出现。</li>
-        </ul>
-      </div>
-      <div>
-        <figure>
-          <div class="shot"><img src="assets/showcase/experiments-result.webp" width="1132" height="903" loading="lazy" alt="实验结果：各指标的变化和 95% 区间，以及推广建议"></div>
-        </figure>
-        <figure style="margin-top:18px">
-          <div class="shot"><img src="assets/showcase/experiments-checks.webp" width="1132" height="520" loading="lazy" alt="实验可靠性检查：分组是否均匀和样本是否足够"></div>
-        </figure>
-      </div>
-    </div>
-  </section>
-
-  <section id="operations" aria-labelledby="operations-title">
-    <p class="chapter">诊断、预测与行动</p>
-    <h2 id="operations-title">从发现问题到有人负责</h2>
-    <div class="feature reverse">
-      <div class="feature-text">
-        <h3>根因诊断和预测</h3>
-        <p>收入变化用 Shapley 方法精确拆成活跃客户、购买频次和客单价三部分，再按国家、品类、渠道找出变化最大的地方，并标出历史上的异常月份。</p>
-        <p>预测页最多同时比较十个时序模型和一个组合模型，用滚动回测按误差排序，选出最准的一个，并说明它比“沿用上月”准多少。</p>
-      </div>
-      <div>
-        <figure>
-          <div class="shot"><img src="assets/showcase/diagnostics-drivers.webp" width="1132" height="950" loading="lazy" alt="根因诊断：收入和利润变化由什么驱动"></div>
-        </figure>
-        <figure style="margin-top:18px">
-          <div class="shot"><img src="assets/showcase/planning-forecast.webp" width="1132" height="1352" loading="lazy" alt="预测页：未来几个月的预测扇形图和模型回测成绩"></div>
-        </figure>
-      </div>
-    </div>
-    <div class="feature">
-      <div class="feature-text">
-        <h3>行动中心、问答助手和报告</h3>
-        <ul class="points">
-          <li><b>行动中心</b>把诊断出的问题变成可分配的行动，记录负责人、截止日和状态；同一个问题在不同日期范围下保持同一条记录。</li>
-          <li><b>问答助手</b>用日常语言提问，例如“为什么利润下降？”。它只回答已审核查询能覆盖的 12 类问题，每个答案都附上计算方法；答不了的问题会直接说明。</li>
-          <li><b>经营报告</b>一键生成 HTML、Word 和 Markdown 三种格式，内容和页面上的数字一致。</li>
-        </ul>
-      </div>
-      <div>
-        <figure>
-          <div class="shot"><img src="assets/showcase/assistant-answer.webp" width="1132" height="760" loading="lazy" alt="问答助手：回答为什么利润下降，并附上数据表和计算方法"></div>
-        </figure>
-        <figure style="margin-top:18px">
-          <div class="shot"><img src="assets/showcase/actions-register.webp" width="1132" height="1027" loading="lazy" alt="行动中心：待处理问题的负责人、截止日和状态"></div>
-          <figcaption>上：问答助手。下：行动中心。</figcaption>
-        </figure>
-      </div>
-    </div>
-  </section>
-
-  <section id="import" aria-labelledby="import-title">
-    <p class="chapter">数据接入</p>
-    <h2 id="import-title">导入你自己的数据，几个坏行拖不垮整个文件</h2>
-    <p class="section-lede">下面是导入真实公开数据集 UCI Online Retail II 的过程：一个 45MB、两个年度工作表、106 万行的 Excel 文件。</p>
-    <div class="feature reverse">
-      <div class="feature-text">
-        <h3>先检查，再确认，再导入</h3>
-        <ul class="points">
-          <li><b>字段自动匹配</b>：Invoice、StockCode、Price 这类表头会自动对应到订单号、商品编码和单价，拿不准的会提示你确认。</li>
-          <li><b>导入前检查</b>：5,959 行问题行（0.58%，几乎都是零价记录）和 5,827 行运费、手续费等非商品行被单独列出，写明原因和金额，还可以下载核对。</li>
-          <li><b>由你决定</b>：勾选“隔离这些行”之后，“确认导入”才能点击。隔离的行保留在仓库里备查，但不计入任何指标。</li>
-          <li><b>默认替换演示数据</b>，避免真实数据和模拟数据混在一起；导入前自动备份，保留最近三份，随时可以恢复。</li>
-        </ul>
-        <p class="note">只有缺少汇率这类结构性问题，或者超过 30% 的行不合格（多半是字段映射错了），才会拒绝整个文件。</p>
-      </div>
-      <figure>
-        <div class="shot">
-          <picture>
-            <source srcset="assets/showcase/import-check.webp" media="(prefers-reduced-motion: reduce)">
-            <img src="assets/showcase/import-consent.webp" width="1132" height="1515" loading="lazy" alt="导入动图：真实工作簿上传后的字段对应、导入前检查和问题行列表；勾选隔离后，确认导入按钮从灰色变为可点击">
-          </picture>
+        <div class="viewer" data-viewer>
+          <figure class="panel" data-tab="趋势与信号">
+            <div class="shot"><img src="assets/showcase/overview-signals.webp" width="1132" height="497" loading="lazy" alt="趋势与信号：月度趋势线，以及按优先级排列的待处理问题"></div>
+            <figcaption>近两年的月度趋势，以及按优先级排列的待处理问题。</figcaption>
+          </figure>
+          <figure class="panel" data-tab="前瞻与目标">
+            <div class="shot"><img src="assets/showcase/overview-outlook.webp" width="1132" height="614" loading="lazy" alt="前瞻与目标：贡献利润预测扇形图，以及本月目标完成度"></div>
+            <figcaption>未来三个月的贡献利润区间，以及本月目标完成度。</figcaption>
+          </figure>
         </div>
-        <figcaption><span class="motion-label">动图</span>勾选“隔离这 5,959 行”之前，导入按钮是灰色的；勾选之后才能导入。</figcaption>
-      </figure>
-    </div>
-  </section>
-
-  <section id="trust" aria-labelledby="trust-title">
-    <p class="chapter">数据与指标信任中心</p>
-    <h2 id="trust-title">每个数字都说得清来源</h2>
-    <div class="feature">
-      <div class="feature-text">
-        <h3>估算值不会被当成审计数字</h3>
-        <p>每一行记录交易、折扣、成本和库存各自的来源状态：已核验、估算、模拟或未提供。指标的可信度取决于它最弱的那个输入，并按行数加权。</p>
-        <ul class="points">
-          <li><b>没有的数据不编造</b>：没有折扣字段按成交价计，收入和源文件逐分对账；没有库存就留空；没有品类就按商品名称归并成商品族。</li>
-          <li><b>质量维度</b>覆盖完整性、唯一性、有效性、一致性、覆盖度和契约符合度。</li>
-          <li><b>未计入的行</b>按原因列出并可下载，数据血缘、导入记录和故障演练也都在这一页。</li>
-        </ul>
       </div>
-      <figure>
-        <div class="shot"><img src="assets/showcase/quality-overview.webp" width="1132" height="961" loading="lazy" alt="信任中心：质量得分、各数据来源状态、质量维度和未计入分析的行"></div>
-      </figure>
-    </div>
-  </section>
+    </section>
 
-  <section id="validation" aria-labelledby="validation-title">
-    <p class="chapter">真实数据验证</p>
-    <h2 id="validation-title">在 106 万行真实账本上跑过一遍</h2>
-    <p class="section-lede">演示数据是干净的，真实账本不是。2.0 用公开的 UCI Online Retail II 数据集完整跑了一遍：在真实浏览器里上传、导入，再逐页检查。除最后两项外，下面的数字都来自那次运行。</p>
-    <div class="stats">
-      <div class="stat"><b>1,067,371</b><span>行交易，两个年度工作表一起读入</span></div>
-      <div class="stat"><b class="gold">£0.00</b><span>对账差额：净销售额加隔离行金额，等于去重后的源文件</span></div>
-      <div class="stat"><b class="aqua">0.58%</b><span>问题行被隔离并可下载，文件照常导入</span></div>
-      <div class="stat"><b>&lt; 0.6 秒</b><span>导入后 17 个页面重复访问的耗时，全部无报错</span></div>
-      <div class="stat"><b>6.5%</b><span>收入预测的滚动回测误差（WAPE），比沿用上月准 55%</span></div>
-      <div class="stat"><b>0.79</b><span>流失模型跨期 AUC，用旧数据训练、用之后 90 天打分</span></div>
-      <div class="stat"><b>132</b><span>个国家和地区可识别，包括 EIRE、RSA 这样的写法</span></div>
-      <div class="stat"><b>250</b><span>项自动化测试，覆盖率 93%，在 Python 3.11 和 3.13 上运行</span></div>
-    </div>
-    <h3 style="margin:40px 0 14px;font-size:1.22rem">真实数据暴露的问题</h3>
-    <p class="section-lede" style="margin-bottom:18px">下面这些问题只在真实数据上出现，现在都已修复，并加了回归测试。</p>
-    <div class="table-scroll">
-      <table class="lessons">
-        <thead><tr><th scope="col">情形</th><th scope="col">之前</th><th scope="col">现在</th></tr></thead>
-        <tbody>
-          <tr><td>源文件没有折扣字段</td><td class="before">凭空扣了 3% 折扣，净销售额比源文件少 £56.6 万</td><td class="after">按成交价计，与源文件逐分对账</td></tr>
-          <tr><td>有几千行零价记录</td><td class="before">整个文件被拒绝导入</td><td class="after">问题行隔离、可下载，确认后照常导入</td></tr>
-          <tr><td>同一商品有两套价目表</td><td class="before">网店和批发价格混在一起，弹性被拉到 −0.16</td><td class="after">按销售渠道分别跟踪，得到 −0.96</td></tr>
-          <tr><td>邮费和平台手续费</td><td class="before">算作商品销售，亚马逊手续费被记成 £22 万退款</td><td class="after">作为非商品行单独列出</td></tr>
-          <tr><td>源文件没有库存</td><td class="before">编造库存量，并据此发出补货告警</td><td class="after">不编造数据，只分析需求</td></tr>
-          <tr><td>当天下单又取消的大单</td><td class="before">80,995 件被算成日需求 900</td><td class="after">需求按扣除退货后的净数计算</td></tr>
-          <tr><td>打开行动中心</td><td class="before">每次都写库，导致全站缓存失效，页面要等 5 秒</td><td class="after">只在内容变化时写入，重复访问在 0.6 秒以内</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
+    <section id="profit" aria-labelledby="profit-title">
+      <p class="chapter">利润与单位经济</p>
+      <h2 id="profit-title">利润为什么变了，拆到每一分钱</h2>
+      <div class="feature">
+        <div class="feature-text">
+          <h3>价格、销量、结构、成本桥接</h3>
+          <p>利润变化最容易被说成“卖得好”或“成本高”。桥接把变化拆成互不重叠的几块：销量规模、商品结构、标价变化、折扣力度、单位成本、新增商品、停售商品、物流、支付、营销和退货。</p>
+          <ul class="points">
+            <li><b>各项相加等于实际变化</b>，未解释差额单独标在图下，演示数据上是 £0.00。</li>
+            <li><b>结构</b>单独成项：卖得多的如果是低利润商品，总销量涨了，利润照样可能跌。</li>
+            <li><b>另一张瀑布图</b>回答“钱去了哪里”，从商品毛额一路扣到贡献利润。</li>
+          </ul>
+        </div>
+        <div class="viewer" data-viewer>
+          <figure class="panel" data-tab="操作演示" data-kind="video">
+            <div class="shot"><video class="clip" width="1280" height="720" muted loop playsinline preload="none" controls poster="assets/video/clip-profit.webp" aria-label="利润页演示：从资金去向滚动到利润桥接"><source src="assets/video/clip-profit.mp4" type="video/mp4"></video></div>
+            <figcaption>从“钱去了哪里”滚动到利润桥接，悬停查看每一项。</figcaption>
+          </figure>
+          <figure class="panel" data-tab="利润桥接">
+            <div class="shot"><img src="assets/showcase/profit-bridge.webp" width="1132" height="649" loading="lazy" alt="利润桥接瀑布图：从基准期利润出发，经过销量规模、商品结构、折扣力度等各项变化，到本期利润"></div>
+            <figcaption>从基准期利润到本期利润，各项相加等于实际变化。</figcaption>
+          </figure>
+          <figure class="panel" data-tab="资金去向">
+            <div class="shot"><img src="assets/showcase/profit-flow.webp" width="1132" height="573" loading="lazy" alt="本期从商品毛额到贡献利润的瀑布图"></div>
+            <figcaption>本期从商品毛额一路扣到贡献利润。</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="markets" aria-labelledby="markets-title">
+      <p class="chapter">全球市场</p>
+      <h2 id="markets-title">哪个市场在赚钱</h2>
+      <div class="feature reverse">
+        <div class="feature-text">
+          <h3>一个可以拖着转的地球仪</h3>
+          <p>每个市场是一个气泡，大小代表净销售额。青色表示利润率高于整体，珊瑚色表示低于整体，一眼就能看出“规模大但不赚钱”的市场。</p>
+          <ul class="points">
+            <li><b>拖动</b>旋转地球，<b>点击</b>气泡打开这个市场的详情：规模、利润率、退货率和它的主要品类。</li>
+            <li><b>键盘也能操作</b>：左右方向键旋转，上下方向键在市场之间切换，回车打开详情。</li>
+            <li><b>能识别 132 个国家和地区</b>，包括 EIRE、RSA、USA 这类导出文件里常见的写法，以及中文名和 ISO 代码。</li>
+          </ul>
+        </div>
+        <div class="viewer" data-viewer>
+          <figure class="panel" data-tab="拖动演示" data-kind="video">
+            <div class="shot"><video class="clip" width="1280" height="720" muted loop playsinline preload="none" controls poster="assets/video/clip-markets.webp" aria-label="地球仪演示：拖动旋转，转到不同的市场"><source src="assets/video/clip-markets.mp4" type="video/mp4"></video></div>
+            <figcaption>拖动地球仪，转到不同的市场。</figcaption>
+          </figure>
+          <figure class="panel" data-tab="完整页面">
+            <div class="shot"><img src="assets/showcase/markets-globe.webp" width="1132" height="815" loading="lazy" alt="全球市场页面：左侧地球仪，右侧各区域净销售额排名"></div>
+            <figcaption>左侧是地球仪，右侧是各区域的净销售额排名，下方还有逐个市场的排名表。</figcaption>
+          </figure>
+        </div>
+      </div>
+      <div class="feature">
+        <div class="feature-text">
+          <h3>销售诊断：变化来自哪里</h3>
+          <p>月度趋势可以切换净销售额、订单量、活跃客户和客单价。销售结构按国家、品类和渠道拆开，再列出相对基准期变化最大的维度，最后用星期热力图看销售节奏。</p>
+        </div>
+        <div class="viewer" data-viewer>
+          <figure class="panel" data-tab="月度趋势">
+            <div class="shot"><img src="assets/showcase/sales-trend.webp" width="1132" height="505" loading="lazy" alt="销售诊断：月度净销售额趋势"></div>
+            <figcaption>月度净销售额趋势。</figcaption>
+          </figure>
+          <figure class="panel" data-tab="销售结构">
+            <div class="shot"><img src="assets/showcase/sales-mix.webp" width="1132" height="775" loading="lazy" alt="销售结构：按国家、品类和渠道的净销售额与贡献利润率"></div>
+            <figcaption>按国家、品类和渠道拆开的净销售额与贡献利润率。</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="part" id="part-understand">
+    <header class="part-head">
+      <p class="part-index">第 2 部分</p>
+      <h2 class="part-title">理解原因</h2>
+      <p class="part-lede">利润变化背后的客户、商品和价格。</p>
+      <ol class="part-map">
+        <li><a href="#customers"><span>2.1</span>客户价值与流失</a></li>
+        <li><a href="#products"><span>2.2</span>商品与库存</a></li>
+        <li><a href="#pricing"><span>2.3</span>定价实验室</a></li>
+      </ol>
+    </header>
+
+    <section id="customers" aria-labelledby="customers-title">
+      <p class="chapter">客户价值与流失</p>
+      <h2 id="customers-title">谁最值钱，谁可能不再回来</h2>
+      <div class="feature reverse">
+        <div class="feature-text">
+          <h3>只有通过验证的模型才会被采用</h3>
+          <p>客户先按最近一次购买、购买频次和金额分成冠军、忠诚、成长、潜力、风险和沉睡几类。流失模型预测每位客户未来 90 天会不会回购。</p>
+          <ul class="points">
+            <li><b>跨期验证</b>：用较早的数据训练，用之后 90 天的真实结果打分。AUC 低于 0.60 时页面会说明，并改用可解释的规则分数。</li>
+            <li><b>校准图</b>展示预测概率和实际回购率是否一致，点越靠近对角线，预测概率越能按字面理解。</li>
+            <li><b>优先联系名单</b>按“预期利润 × 流失风险”排序，并给出召回、自动触达或交叉销售的建议。</li>
+            <li><b>覆盖范围写明</b>：匿名订单不在客户分析内，页面会标出带客户编号的订单占多少销售额。</li>
+          </ul>
+        </div>
+        <div class="viewer" data-viewer>
+          <figure class="panel" data-tab="价值与风险">
+            <div class="shot"><img src="assets/showcase/customers-churn.webp" width="1132" height="671" loading="lazy" alt="流失预测：客户价值与流失风险散点图，以及模型校准曲线"></div>
+            <figcaption>客户价值与流失风险散点图，以及模型校准曲线。</figcaption>
+          </figure>
+          <figure class="panel" data-tab="客户分层">
+            <div class="shot"><img src="assets/showcase/customers-segments.webp" width="1132" height="533" loading="lazy" alt="客户分层矩形树图：冠军、忠诚、成长、风险、沉睡和潜力客户的贡献利润"></div>
+            <figcaption>各客户层的贡献利润。</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="products" aria-labelledby="products-title">
+      <p class="chapter">商品与库存</p>
+      <h2 id="products-title">什么好卖、什么一起卖、什么该补货</h2>
+      <div class="feature">
+        <div class="feature-text">
+          <h3>集中度与连带购买</h3>
+          <p>累计收入曲线显示收入有多依赖头部商品，按全部商品计算，而不是只算前几百个。商品效率地图把销售额和贡献利润率放在一起，标出卖得多但赚得少的商品。</p>
+          <ul class="points">
+            <li><b>连带购买</b>用提升度衡量：提升度为 2，代表两件商品一起出现的次数是随机搭配时的两倍。</li>
+            <li>至少要有 8 笔共同订单才会列出，避免把偶然当规律。</li>
+          </ul>
+        </div>
+        <div class="viewer" data-viewer>
+          <figure class="panel" data-tab="收入集中度">
+            <div class="shot"><img src="assets/showcase/products-concentration.webp" width="1132" height="507" loading="lazy" alt="收入集中度：累计收入曲线和净销售额前十的商品"></div>
+            <figcaption>累计收入曲线和净销售额前十的商品。</figcaption>
+          </figure>
+          <figure class="panel" data-tab="连带购买">
+            <div class="shot"><img src="assets/showcase/products-basket.webp" width="1132" height="661" loading="lazy" alt="连带购买表：常被一起购买的商品组合、共同订单数、连带率和提升度"></div>
+            <figcaption>常被一起购买的商品组合，以及共同订单数、连带率和提升度。</figcaption>
+          </figure>
+        </div>
+      </div>
+      <div class="feature reverse">
+        <div class="feature-text">
+          <h3>按服务水平计算的补货策略</h3>
+          <p>商品按价值（ABC）和需求稳定性（XYZ）分成九类：AX 适合自动补货，AZ 需要人工盯。安全库存由目标服务水平、需求波动和交期波动一起决定。</p>
+          <ul class="points">
+            <li><b>需求按净数计算</b>：当天下单又取消的订单不算需求。</li>
+            <li><b>补货清单</b>列出现有库存、补货线、建议订购量、预计缺货日和缺货会损失的利润，可以直接下载。</li>
+            <li>数据里没有库存字段时，这一页只分析需求，不会编造库存去发补货告警。</li>
+          </ul>
+        </div>
+        <div class="viewer" data-viewer>
+          <figure class="panel" data-tab="补货策略">
+            <div class="shot"><img src="assets/showcase/inventory-policy.webp" width="1132" height="943" loading="lazy" alt="补货策略：ABC-XYZ 收入热力图，以及缺货损失最大的商品"></div>
+            <figcaption>ABC-XYZ 收入热力图，以及缺货损失最大的商品。</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="pricing" aria-labelledby="pricing-title">
+      <p class="chapter">定价实验室</p>
+      <h2 id="pricing-title">顾客对价格有多敏感，该不该调价</h2>
+      <div class="feature">
+        <div class="feature-text">
+          <h3>价格弹性从你自己的订单里估计</h3>
+          <p>每个品类做一次泊松回归：每周订单数对实际售价，同时扣除每个商品本身的受欢迎程度和每一周的季节影响，所以旺季和爆款不会被误当成价格效应。</p>
+          <ul class="points">
+            <li><b>按销售渠道分别跟踪</b>：同一商品在网店和批发渠道常用不同价目表，混在一起会把渠道比例的变化误当成价格变化。</li>
+            <li><b>误差按商品聚类</b>，再向品类先验收缩：数据少的品类贴近行业假设，数据多的品类主要由数据决定，每一行都标明是哪一种。</li>
+            <li><b>每条调价建议</b>都给出弹性 95% 区间两端的利润变化，只有在不利的一端仍然赚钱时才算稳健。</li>
+          </ul>
+          <p class="note">历史价格不是随机设定的，估计只在历史价格附近可靠。页面会建议先用 A/B 实验验证，再全量调价。</p>
+        </div>
+        <div class="viewer" data-viewer>
+          <figure class="panel" data-tab="操作演示" data-kind="video">
+            <div class="shot"><video class="clip" width="1280" height="720" muted loop playsinline preload="none" controls poster="assets/video/clip-pricing.webp" aria-label="定价实验室演示：从弹性估计滚动到调价建议"><source src="assets/video/clip-pricing.mp4" type="video/mp4"></video></div>
+            <figcaption>先看各品类的弹性估计，再滚动到调价建议。</figcaption>
+          </figure>
+          <figure class="panel" data-tab="弹性估计">
+            <div class="shot"><img src="assets/showcase/pricing-elasticity.webp" width="1132" height="892" loading="lazy" alt="价格弹性图：各品类的数据估计、95% 区间和行业假设"></div>
+            <figcaption>各品类的数据估计、95% 区间和行业假设。</figcaption>
+          </figure>
+          <figure class="panel" data-tab="调价建议">
+            <div class="shot"><img src="assets/showcase/pricing-moves.webp" width="1132" height="785" loading="lazy" alt="调价建议：各品类预计的贡献利润变化和利润区间"></div>
+            <figcaption>建议调价幅度，以及预计的贡献利润区间。</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="part" id="part-decide">
+    <header class="part-head">
+      <p class="part-index">第 3 部分</p>
+      <h2 class="part-title">做出决策</h2>
+      <p class="part-lede">先模拟，再实验，最后把行动落实到人。</p>
+      <ol class="part-map">
+        <li><a href="#decisions"><span>3.1</span>概率决策实验室</a></li>
+        <li><a href="#experiments"><span>3.2</span>A/B 实验分析</a></li>
+        <li><a href="#operations"><span>3.3</span>诊断、预测与行动</a></li>
+      </ol>
+    </header>
+
+    <section id="decisions" aria-labelledby="decisions-title">
+      <p class="chapter">概率决策实验室</p>
+      <h2 id="decisions-title">做决定之前，先看几千种可能的结果</h2>
+      <div class="feature reverse">
+        <div class="feature-text">
+          <h3>一个方案不是一个数字，而是一个分布</h3>
+          <p>调整价格、折扣、营销、采购成本或退货率，系统会抽取 5,000 种可能的未来：价格弹性、营销响应、基础需求、采购成本和物流成本都按看得见的分布变化。</p>
+          <ul class="points">
+            <li><b>落下的每个点</b>是一种可能的结果，左边红色是利润下降，右边青色是利润改善。</li>
+            <li>同时给出利润变化的中位数、较差情形（5%）和较好情形（95%），以及改善概率和“增收但减利”的概率。</li>
+            <li><b>敏感度条形图</b>告诉你结果最受哪个假设影响，值得先把那个假设弄准。</li>
+            <li><b>自动寻优</b>让所有价格、折扣和营销组合面对同一批模拟未来，在收益与风险之间找出最优边界。</li>
+          </ul>
+        </div>
+        <div class="viewer" data-viewer>
+          <figure class="panel" data-tab="模拟演示" data-kind="video">
+            <div class="shot"><video class="clip" width="1280" height="720" muted loop playsinline preload="none" controls poster="assets/video/clip-decision.webp" aria-label="风险模拟演示：上调价格后，模拟结果重新落下"><source src="assets/video/clip-decision.mp4" type="video/mp4"></video></div>
+            <figcaption>上调价格后，几千种可能的结果重新落下，堆成新的利润分布。</figcaption>
+          </figure>
+          <figure class="panel" data-tab="风险模拟">
+            <div class="shot"><img src="assets/showcase/decision-simulation.webp" width="1132" height="1284" loading="lazy" alt="风险模拟页面：方案参数、利润变化分布和敏感度"></div>
+            <figcaption>参数、分布、关键数字和敏感度在同一屏。</figcaption>
+          </figure>
+          <figure class="panel" data-tab="自动寻优">
+            <div class="shot"><img src="assets/showcase/decision-frontier.webp" width="1132" height="1405" loading="lazy" alt="自动寻优：数百个方案在收益与风险平面上的位置，以及推荐方案"></div>
+            <figcaption>数百个方案在收益与风险平面上的位置，以及推荐方案。</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="experiments" aria-labelledby="experiments-title">
+      <p class="chapter">A/B 实验分析</p>
+      <h2 id="experiments-title">这次实验能下结论吗</h2>
+      <div class="feature">
+        <div class="feature-text">
+          <h3>证据不够时，结论就是“证据不足”</h3>
+          <p>实验不只看转化率，还看收入、利润和退货。每个指标都给出 95% 区间，结论按证据分为推广、试点、证据不足和停止四种。</p>
+          <ul class="points">
+            <li><b>推广</b>要求利润区间整体在 0 以上；<b>停止</b>对应利润明显下降或退货超过护栏。</li>
+            <li><b>分组检查</b>发现对照组和实验组人数失衡时会报警，这通常说明分流出了问题。</li>
+            <li><b>样本够不够</b>：给出最小可检测提升和所需样本量，说明这次实验本来能不能发现有意义的效果。</li>
+            <li>可以导入真实实验的客户级结果；演示实验只在模拟仓库里出现。</li>
+          </ul>
+        </div>
+        <div class="viewer" data-viewer>
+          <figure class="panel" data-tab="实验结果">
+            <div class="shot"><img src="assets/showcase/experiments-result.webp" width="1132" height="903" loading="lazy" alt="实验结果：各指标的变化和 95% 区间，以及推广建议"></div>
+            <figcaption>各指标的变化和 95% 区间，以及推广建议。</figcaption>
+          </figure>
+          <figure class="panel" data-tab="可靠性检查">
+            <div class="shot"><img src="assets/showcase/experiments-checks.webp" width="1132" height="520" loading="lazy" alt="实验可靠性检查：分组是否均匀和样本是否足够"></div>
+            <figcaption>分组是否均匀，样本是否足够。</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="operations" aria-labelledby="operations-title">
+      <p class="chapter">诊断、预测与行动</p>
+      <h2 id="operations-title">从发现问题到有人负责</h2>
+      <div class="feature reverse">
+        <div class="feature-text">
+          <h3>根因诊断和预测</h3>
+          <p>收入变化用 Shapley 方法精确拆成活跃客户、购买频次和客单价三部分，再按国家、品类、渠道找出变化最大的地方，并标出历史上的异常月份。</p>
+          <p>预测页最多同时比较十个时序模型和一个组合模型，用滚动回测按误差排序，选出最准的一个，并说明它比“沿用上月”准多少。</p>
+        </div>
+        <div class="viewer" data-viewer>
+          <figure class="panel" data-tab="根因诊断">
+            <div class="shot"><img src="assets/showcase/diagnostics-drivers.webp" width="1132" height="950" loading="lazy" alt="根因诊断：收入和利润变化由什么驱动"></div>
+            <figcaption>收入和利润的变化由什么驱动。</figcaption>
+          </figure>
+          <figure class="panel" data-tab="预测">
+            <div class="shot"><img src="assets/showcase/planning-forecast.webp" width="1132" height="1352" loading="lazy" alt="预测页：未来几个月的预测扇形图和模型回测成绩"></div>
+            <figcaption>未来几个月的预测扇形图，以及各模型的回测成绩。</figcaption>
+          </figure>
+        </div>
+      </div>
+      <div class="feature">
+        <div class="feature-text">
+          <h3>行动中心、问答助手和报告</h3>
+          <ul class="points">
+            <li><b>行动中心</b>把诊断出的问题变成可分配的行动，记录负责人、截止日和状态；同一个问题在不同日期范围下保持同一条记录。</li>
+            <li><b>问答助手</b>用日常语言提问，例如“为什么利润下降？”。它只回答已审核查询能覆盖的 12 类问题，每个答案都附上计算方法；答不了的问题会直接说明。</li>
+            <li><b>经营报告</b>一键生成 HTML、Word 和 Markdown 三种格式，内容和页面上的数字一致。</li>
+          </ul>
+        </div>
+        <div class="viewer" data-viewer>
+          <figure class="panel" data-tab="问答演示" data-kind="video">
+            <div class="shot"><video class="clip" width="1280" height="720" muted loop playsinline preload="none" controls poster="assets/video/clip-assistant.webp" aria-label="问答助手演示：点击为什么利润下降，得到带数据的回答"><source src="assets/video/clip-assistant.mp4" type="video/mp4"></video></div>
+            <figcaption>点击“为什么利润下降？”，答案附带数据表和计算方法。</figcaption>
+          </figure>
+          <figure class="panel" data-tab="问答助手">
+            <div class="shot"><img src="assets/showcase/assistant-answer.webp" width="1132" height="760" loading="lazy" alt="问答助手：回答为什么利润下降，并附上数据表和计算方法"></div>
+            <figcaption>回答为什么利润下降，并附上数据表和计算方法。</figcaption>
+          </figure>
+          <figure class="panel" data-tab="行动中心">
+            <div class="shot"><img src="assets/showcase/actions-register.webp" width="1132" height="1027" loading="lazy" alt="行动中心：待处理问题的负责人、截止日和状态"></div>
+            <figcaption>待处理问题的负责人、截止日和状态。</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="part" id="part-trust">
+    <header class="part-head">
+      <p class="part-index">第 4 部分</p>
+      <h2 class="part-title">信任数据</h2>
+      <p class="part-lede">数据怎么进来，可信度怎么标，在真实账本上表现如何。</p>
+      <ol class="part-map">
+        <li><a href="#import"><span>4.1</span>数据接入</a></li>
+        <li><a href="#trust"><span>4.2</span>数据与指标信任中心</a></li>
+        <li><a href="#validation"><span>4.3</span>真实数据验证</a></li>
+      </ol>
+    </header>
+
+    <section id="import" aria-labelledby="import-title">
+      <p class="chapter">数据接入</p>
+      <h2 id="import-title">导入你自己的数据，几个坏行拖不垮整个文件</h2>
+      <p class="section-lede">下面是导入真实公开数据集 UCI Online Retail II 的过程：一个 45MB、两个年度工作表、106 万行的 Excel 文件。</p>
+      <div class="feature reverse">
+        <div class="feature-text">
+          <h3>先检查，再确认，再导入</h3>
+          <ul class="points">
+            <li><b>字段自动匹配</b>：Invoice、StockCode、Price 这类表头会自动对应到订单号、商品编码和单价，拿不准的会提示你确认。</li>
+            <li><b>导入前检查</b>：5,959 行问题行（0.58%，几乎都是零价记录）和 5,827 行运费、手续费等非商品行被单独列出，写明原因和金额，还可以下载核对。</li>
+            <li><b>由你决定</b>：勾选“隔离这些行”之后，“确认导入”才能点击。隔离的行保留在仓库里备查，但不计入任何指标。</li>
+            <li><b>默认替换演示数据</b>，避免真实数据和模拟数据混在一起；导入前自动备份，保留最近三份，随时可以恢复。</li>
+          </ul>
+          <p class="note">只有缺少汇率这类结构性问题，或者超过 30% 的行不合格（多半是字段映射错了），才会拒绝整个文件。</p>
+        </div>
+        <div class="viewer" data-viewer>
+          <figure class="panel" data-tab="导入演示" data-kind="motion">
+            <div class="shot">
+              <picture>
+                <source srcset="assets/showcase/import-check.webp" media="(prefers-reduced-motion: reduce)">
+                <img src="assets/showcase/import-consent.webp" width="1132" height="1515" loading="lazy" alt="导入动图：真实工作簿上传后的字段对应、导入前检查和问题行列表；勾选隔离后，确认导入按钮从灰色变为可点击">
+              </picture>
+            </div>
+            <figcaption>勾选“隔离这 5,959 行”之前，导入按钮是灰色的；勾选之后才能导入。</figcaption>
+          </figure>
+          <figure class="panel" data-tab="导入前检查">
+            <div class="shot"><img src="assets/showcase/import-check.webp" width="1132" height="1515" loading="lazy" alt="导入前检查：字段对应、问题行和非商品行列表"></div>
+            <figcaption>字段对应、导入前检查，以及问题行和非商品行的列表。</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="trust" aria-labelledby="trust-title">
+      <p class="chapter">数据与指标信任中心</p>
+      <h2 id="trust-title">每个数字都说得清来源</h2>
+      <div class="feature">
+        <div class="feature-text">
+          <h3>估算值不会被当成审计数字</h3>
+          <p>每一行记录交易、折扣、成本和库存各自的来源状态：已核验、估算、模拟或未提供。指标的可信度取决于它最弱的那个输入，并按行数加权。</p>
+          <ul class="points">
+            <li><b>没有的数据不编造</b>：没有折扣字段按成交价计，收入和源文件逐分对账；没有库存就留空；没有品类就按商品名称归并成商品族。</li>
+            <li><b>质量维度</b>覆盖完整性、唯一性、有效性、一致性、覆盖度和契约符合度。</li>
+            <li><b>未计入的行</b>按原因列出并可下载，数据血缘、导入记录和故障演练也都在这一页。</li>
+          </ul>
+        </div>
+        <div class="viewer" data-viewer>
+          <figure class="panel" data-tab="操作演示" data-kind="video">
+            <div class="shot"><video class="clip" width="1280" height="720" muted loop playsinline preload="none" controls poster="assets/video/clip-quality.webp" aria-label="信任中心演示：查看质量维度，再打开未计入的行"><source src="assets/video/clip-quality.mp4" type="video/mp4"></video></div>
+            <figcaption>先看质量维度，再打开“未计入的行”。</figcaption>
+          </figure>
+          <figure class="panel" data-tab="信任中心">
+            <div class="shot"><img src="assets/showcase/quality-overview.webp" width="1132" height="961" loading="lazy" alt="信任中心：质量得分、各数据来源状态、质量维度和未计入分析的行"></div>
+            <figcaption>质量得分、各数据来源状态、质量维度和未计入分析的行。</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="validation" aria-labelledby="validation-title">
+      <p class="chapter">真实数据验证</p>
+      <h2 id="validation-title">在 106 万行真实账本上跑过一遍</h2>
+      <p class="section-lede">演示数据是干净的，真实账本不是。2.0 用公开的 UCI Online Retail II 数据集完整跑了一遍：在真实浏览器里上传、导入，再逐页检查。除最后两项外，下面的数字都来自那次运行。</p>
+      <div class="stats">
+        <div class="stat"><b>1,067,371</b><span>行交易，两个年度工作表一起读入</span></div>
+        <div class="stat"><b class="gold">£0.00</b><span>对账差额：净销售额加隔离行金额，等于去重后的源文件</span></div>
+        <div class="stat"><b class="aqua">0.58%</b><span>问题行被隔离并可下载，文件照常导入</span></div>
+        <div class="stat"><b>&lt; 0.6 秒</b><span>导入后 17 个页面重复访问的耗时，全部无报错</span></div>
+        <div class="stat"><b>6.5%</b><span>收入预测的滚动回测误差（WAPE），比沿用上月准 55%</span></div>
+        <div class="stat"><b>0.79</b><span>流失模型跨期 AUC，用旧数据训练、用之后 90 天打分</span></div>
+        <div class="stat"><b>132</b><span>个国家和地区可识别，包括 EIRE、RSA 这样的写法</span></div>
+        <div class="stat"><b>250</b><span>项自动化测试，覆盖率 93%，在 Python 3.11 和 3.13 上运行</span></div>
+      </div>
+      <h3 class="sub">真实数据暴露的问题</h3>
+      <p class="section-lede sub-lede">下面这些问题只在真实数据上出现，现在都已修复，并加了回归测试。</p>
+      <div class="table-scroll">
+        <table class="lessons">
+          <thead><tr><th scope="col">情形</th><th scope="col">之前</th><th scope="col">现在</th></tr></thead>
+          <tbody>
+            <tr><td>源文件没有折扣字段</td><td class="before">凭空扣了 3% 折扣，净销售额比源文件少 £56.6 万</td><td class="after">按成交价计，与源文件逐分对账</td></tr>
+            <tr><td>有几千行零价记录</td><td class="before">整个文件被拒绝导入</td><td class="after">问题行隔离、可下载，确认后照常导入</td></tr>
+            <tr><td>同一商品有两套价目表</td><td class="before">网店和批发价格混在一起，弹性被拉到 −0.16</td><td class="after">按销售渠道分别跟踪，得到 −0.96</td></tr>
+            <tr><td>邮费和平台手续费</td><td class="before">算作商品销售，亚马逊手续费被记成 £22 万退款</td><td class="after">作为非商品行单独列出</td></tr>
+            <tr><td>源文件没有库存</td><td class="before">编造库存量，并据此发出补货告警</td><td class="after">不编造数据，只分析需求</td></tr>
+            <tr><td>当天下单又取消的大单</td><td class="before">80,995 件被算成日需求 900</td><td class="after">需求按扣除退货后的净数计算</td></tr>
+            <tr><td>打开行动中心</td><td class="before">每次都写库，导致全站缓存失效，页面要等 5 秒</td><td class="after">只在内容变化时写入，重复访问在 0.6 秒以内</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
 
   <section id="limits" aria-labelledby="limits-title">
     <p class="chapter">方法与边界</p>
@@ -531,7 +626,7 @@
         </ul>
       </div>
     </div>
-    <p class="section-lede" style="margin-top:22px">每个模型的做法、假设和局限都写在 <a href="https://github.com/zhao-yushen/InsightFlow-Analytics/blob/main/docs/methodology.md">方法说明</a> 里。</p>
+    <p class="section-lede after-cards">每个模型的做法、假设和局限都写在 <a href="https://github.com/zhao-yushen/InsightFlow-Analytics/blob/main/docs/methodology.md">方法说明</a> 里。</p>
   </section>
 
   <section id="engineering" aria-labelledby="engineering-title">
@@ -567,7 +662,7 @@ insightflow run</code></pre>
 
   <footer>
     <p>独立设计与开发：Zhao Yushen。MIT License。</p>
-    <p>截图和动图使用可复现的模拟数据，不代表任何企业的真实经营结果；数据接入一节展示的是公开数据集 UCI Online Retail II。</p>
+    <p>截图、动图和视频使用可复现的模拟数据，不代表任何企业的真实经营结果；数据接入一节展示的是公开数据集 UCI Online Retail II。</p>
   </footer>
 </div>
 </body>

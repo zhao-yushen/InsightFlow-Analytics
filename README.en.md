@@ -4,7 +4,7 @@ English | [中文](README.md)
 
 InsightFlow is a retail analytics and decision platform. It turns transaction data into a money flow you can see, shows where revenue comes from and where it leaks away, and simulates the result of a decision before you make it.
 
-Version 2.0.0 has been tested on a real public ledger of 1.06 million lines, covering import, reconciliation and every page; see "Validation on real data" below. The [showcase page](https://zhao-yushen.github.io/InsightFlow-Analytics/en/) walks through each feature with screenshots and animations.
+Version 2.0.0 has been tested on a real public ledger of 1.06 million lines, covering import, reconciliation and every page; see "Validation on real data" below. The [showcase page](https://zhao-yushen.github.io/InsightFlow-Analytics/en/) walks through each feature with screenshots, short clips and a one-minute product tour.
 
 <img src="docs/assets/showcase/river-flow.webp" width="100%" alt="Animated money river: gross sales flow from left to right while discounts, refunds, product cost, shipping, payment, marketing and return handling branch off in turn, leaving contribution profit">
 
@@ -25,61 +25,73 @@ The money river: the width of the channel is the amount, each stream that branch
 
 ## Feature tour
 
-### Where the money went: Executive Overview
+<a href="https://zhao-yushen.github.io/InsightFlow-Analytics/en/#tour"><img src="docs/assets/video/tour-cover-en.webp" width="100%" alt="Product tour video cover: opens the one-minute tour on the showcase page"></a>
+
+The one-minute tour was recorded from the app running locally. It moves through the money-flow drill-down, the profit bridge, global markets, pricing, risk simulation, the assistant and the Trust Center; [click the cover to play it on the showcase page](https://zhao-yushen.github.io/InsightFlow-Analytics/en/#tour). The sections below follow the same four parts as the showcase.
+
+### See the business
+
+#### Where the money went: Executive Overview
 
 The page opens with one sentence on what happened this period. Below it, the money river draws the income statement as a flow. Click any outflow to open its breakdown by category and by market, along with how its share of sales has moved against the comparison period. You can compare with the previous period or with the same period last year.
 
-<img src="docs/assets/showcase/drilldown.webp" width="820" alt="Drill-down animation: after a click on the product cost stream, tables of cost by category and by market open below">
+<img src="docs/assets/showcase/drilldown.webp" width="820" alt="Drill-down animation: hovering over and clicking the product cost stream opens its breakdown by category and by market, then scrolls to the tables">
 
-### Why profit changed
+#### Why profit changed
 
 The change in profit is split into volume, product mix, list price, discounting, unit cost, new and discontinued products, shipping, payment fees, marketing and returns. The parts add up to the actual change, and the unexplained remainder is shown on its own; on the demo data it is £0.00.
 
 <img src="docs/assets/showcase/profit-bridge.webp" width="820" alt="Profit bridge waterfall: from the comparison period's profit, through each change, to this period's profit">
 
-### Which markets make money
+#### Which markets make money
 
 The globe turns when you drag it. Bubble size is net revenue; teal marks a margin above the overall margin, and coral one below it. Click a market, or select it with the keyboard, to see its size, margin, return rate and main categories. The app recognises 132 countries and regions, including spellings such as EIRE and RSA.
 
 <img src="docs/assets/showcase/globe-turn.webp" width="420" alt="Globe animation: one full turn by dragging">
 
-### Who may stop buying
+### Understand why
+
+#### Who may stop buying
 
 The churn model is trained on older data and scored on what customers actually did in the following 90 days. If its AUC is below 0.60, it is not used. A calibration chart shows whether predicted probabilities match actual repurchase rates, and the priority contact list is sorted by expected profit × churn risk.
 
 <img src="docs/assets/showcase/customers-churn.webp" width="820" alt="Churn prediction: a scatter of customer value against churn risk, and the model's calibration curve">
 
-### What sells and what to restock
+#### What sells and what to restock
 
 Products fall into nine ABC-XYZ classes by value and demand stability. Safety stock depends on the service level, demand variability and lead-time variability together. Demand is counted net of returns. When the data has no stock levels, the page analyses demand only and does not invent stock.
 
 <img src="docs/assets/showcase/inventory-policy.webp" width="820" alt="Restocking policy: ABC-XYZ revenue heatmap and the products with the largest stockout losses">
 
-### Whether to change a price
+#### Whether to change a price
 
 Price elasticity is estimated from order data. Each sales channel is tracked on its own, product popularity and seasonality are held fixed, and standard errors are clustered by product. Every price recommendation shows the profit change at both ends of the 95% elasticity interval, and it counts as robust only if the unfavourable end still makes money.
 
 <img src="docs/assets/showcase/pricing-elasticity.webp" width="820" alt="Price elasticity chart: the estimate from the data, its 95% interval and the industry assumption for each category">
 
-### Simulate first, then decide
+### Decide and act
+
+#### Simulate first, then decide
 
 After you change price, discount, marketing or cost, the lab draws 5,000 possible futures and reports the distribution of the profit change, the probability of an improvement and the assumptions the result is most sensitive to. The optimiser runs every plan against the same simulated futures and marks the plans with the best return for their level of risk.
 
 <img src="docs/assets/showcase/simulation-drop.webp" width="640" alt="Simulation animation: thousands of simulated outcomes fall and pile up into the distribution of profit change">
 
-### Questions, diagnostics and actions
+#### Questions, diagnostics and actions
 
 Ask in plain language, for example "Why did profit fall?". The assistant answers only questions that its reviewed queries cover, and it shows how each answer was calculated. Issues found by the diagnostics can become actions with an owner, a due date and a status.
 
 <img src="docs/assets/showcase/assistant-answer.webp" width="820" alt="Assistant: answering why profit fell, with a data table and the calculation method">
 
-### Importing real data
+### Trust the numbers
+
+#### Importing real data
 
 This is the import of the 1.06-million-line UCI Online Retail II workbook. Columns are matched automatically, and before anything is imported the page lists 5,959 problem lines and 5,827 postage and fee lines with their reasons and amounts. The import button stays disabled until you tick the box that sets those lines aside.
 
 <img src="docs/assets/showcase/import-consent.webp" width="760" alt="Import animation: column matching and the pre-import check on a real workbook; once the set-aside box is ticked, the import button turns from grey to clickable">
 
-### Every number has a source
+#### Every number has a source
 
 Each line records a separate source status for the transaction, discount, cost and stock, and a metric's trust level depends on its weakest input. Lines left out of the analysis are listed by reason and can be downloaded for checking.
 

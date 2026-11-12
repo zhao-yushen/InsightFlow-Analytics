@@ -145,11 +145,13 @@
         .filter((el) => el.matches(".chapter, h2, h3, .section-lede"))
         .forEach((el, i) => tag(el, null, i));
     }
-    group(".feature-text", "h3, p, li", null);
-    for (const block of document.querySelectorAll(".feature, .pair")) {
-      block.querySelectorAll("figure").forEach((figure, i) => tag(figure, "rv-rise", i));
+    for (const head of document.querySelectorAll(".part-head")) {
+      head.querySelectorAll(".part-index, .part-title, .part-lede").forEach((el, i) => tag(el, null, i));
+      head.querySelectorAll(".part-map li").forEach((el, i) => tag(el, "rv-fade", i + 2));
     }
-    for (const figure of document.querySelectorAll("figure.wide")) tag(figure, "rv-rise", 0);
+    group(".feature-text", "h3, p, li", null);
+    for (const viewer of document.querySelectorAll(".viewer")) tag(viewer, "rv-rise", 1);
+    group(".film-chapters", "li", "rv-fade");
     for (const pipe of document.querySelectorAll(".pipeline")) {
       pipe.classList.add("rv-pipe");
       tag(pipe, "rv-fade", 0);
@@ -189,6 +191,199 @@
       if (box.top < limit && box.bottom > 0) show(el);
       else io.observe(el);
     }
+  }
+
+  /* Media viewers: one visual area per feature. Tabs switch views, the frame eases to the
+   * new height, and a clip plays only while its tab is open and on screen. */
+  function initViewers() {
+    const clipsVisible = new Set();
+    const playIfReady = (viewer) => {
+      const panel = viewer.querySelector(".panel:not([hidden])");
+      const clip = panel && panel.querySelector("video.clip");
+      if (!clip) return;
+      if (motion && clipsVisible.has(viewer)) {
+        clip.play().catch(() => {
+          clip.controls = true;
+        });
+      } else {
+        clip.pause();
+      }
+    };
+
+    let serial = 0;
+    for (const viewer of document.querySelectorAll("[data-viewer]")) {
+      const panels = [...viewer.querySelectorAll(":scope > .panel")];
+      for (const clip of viewer.querySelectorAll("video.clip")) {
+        // With motion allowed, clips loop silently like moving screenshots; otherwise they keep their controls.
+        if (motion) clip.controls = false;
+      }
+      if (panels.length < 2) continue;
+      const id = `viewer-${++serial}`;
+      const stage = document.createElement("div");
+      stage.className = "viewer-stage";
+      const tabs = document.createElement("div");
+      tabs.className = "viewer-tabs";
+      tabs.setAttribute("role", "tablist");
+      viewer.prepend(tabs);
+      viewer.append(stage);
+      const buttons = panels.map((panel, i) => {
+        stage.append(panel);
+        panel.id = `${id}-panel-${i}`;
+        panel.setAttribute("role", "tabpanel");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.id = `${id}-tab-${i}`;
+        button.setAttribute("role", "tab");
+        button.setAttribute("aria-controls", panel.id);
+        button.textContent = panel.dataset.tab || String(i + 1);
+        if (panel.dataset.kind) button.classList.add(panel.dataset.kind);
+        panel.setAttribute("aria-labelledby", button.id);
+        tabs.append(button);
+        return button;
+      });
+      viewer.classList.add("is-tabbed");
+      let current = 0;
+      const select = (index, focus) => {
+        if (index === current) return;
+        const from = panels[current];
+        const to = panels[index];
+        const before = stage.offsetHeight;
+        from.hidden = true;
+        const clip = from.querySelector("video.clip");
+        if (clip) clip.pause();
+        to.hidden = false;
+        buttons.forEach((b, i) => {
+          b.setAttribute("aria-selected", String(i === index));
+          b.tabIndex = i === index ? 0 : -1;
+        });
+        if (focus) buttons[index].focus();
+        current = index;
+        if (motion) {
+          stage.style.height = "";
+          const after = stage.offsetHeight;
+          stage.style.height = `${before}px`;
+          void stage.offsetHeight;
+          stage.style.height = `${after}px`;
+          const settle = () => {
+            stage.style.height = "";
+            stage.removeEventListener("transitionend", settle);
+          };
+          stage.addEventListener("transitionend", settle);
+          setTimeout(settle, 800);
+          to.classList.remove("is-entering");
+          void to.offsetWidth;
+          to.classList.add("is-entering");
+        }
+        playIfReady(viewer);
+      };
+      panels.forEach((panel, i) => {
+        panel.hidden = i !== 0;
+        buttons[i].setAttribute("aria-selected", String(i === 0));
+        buttons[i].tabIndex = i === 0 ? 0 : -1;
+        buttons[i].addEventListener("click", () => select(i, false));
+      });
+      tabs.addEventListener("keydown", (event) => {
+        const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+        if (event.key === "Home") select(0, true);
+        else if (event.key === "End") select(panels.length - 1, true);
+        else if (step) select((current + step + panels.length) % panels.length, true);
+        else return;
+        event.preventDefault();
+      });
+    }
+
+    if (!("IntersectionObserver" in window)) return;
+    const watch = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) clipsVisible.add(entry.target);
+          else clipsVisible.delete(entry.target);
+          playIfReady(entry.target);
+        }
+      },
+      { threshold: 0.35 }
+    );
+    for (const viewer of document.querySelectorAll("[data-viewer]")) {
+      if (viewer.querySelector("video.clip")) watch.observe(viewer);
+    }
+    document.addEventListener("visibilitychange", () => {
+      for (const clip of document.querySelectorAll("video.clip")) if (document.hidden) clip.pause();
+      if (!document.hidden) for (const viewer of clipsVisible) playIfReady(viewer);
+    });
+  }
+
+  /* The product film: a play button over the poster, chapters that jump, and a caption
+   * that names what each chapter shows. */
+  function initFilm() {
+    const film = document.querySelector("[data-film]");
+    const video = film && film.querySelector("video");
+    if (!video) return;
+    const play = film.querySelector(".film-play");
+    const caption = film.querySelector(".film-caption");
+    const buttons = [...film.querySelectorAll(".film-chapters button")];
+    const starts = buttons.map((b) => Number(b.dataset.at) || 0);
+    video.controls = false;
+    if (play) play.hidden = false;
+    let active = -1;
+    let ticking = false;
+
+    const chapterAt = (t) => {
+      let index = 0;
+      for (let i = 0; i < starts.length; i++) if (t >= starts[i] - 0.05) index = i;
+      return index;
+    };
+    const paint = () => {
+      const t = video.currentTime;
+      const index = chapterAt(t);
+      if (index !== active) {
+        active = index;
+        buttons.forEach((b, i) => {
+          if (i === index) b.setAttribute("aria-current", "true");
+          else b.removeAttribute("aria-current");
+          if (i !== index) b.style.setProperty("--p", i < index ? "1" : "0");
+        });
+        if (caption) {
+          caption.classList.remove("is-on");
+          caption.textContent = buttons[index].dataset.note || "";
+          void caption.offsetWidth;
+          caption.classList.add("is-on");
+        }
+      }
+      const end = index + 1 < starts.length ? starts[index + 1] : video.duration || starts[index] + 8;
+      const p = clamp01((t - starts[index]) / Math.max(0.1, end - starts[index]));
+      buttons[index].style.setProperty("--p", p.toFixed(3));
+    };
+    const loop = () => {
+      paint();
+      if (!video.paused && !video.ended) raf(loop);
+      else ticking = false;
+    };
+    const start = (at) => {
+      if (Number.isFinite(at)) {
+        // Before the film has loaded there is nothing to seek in yet, so jump once it has.
+        if (video.readyState >= 1) video.currentTime = at;
+        else video.addEventListener("loadedmetadata", () => { video.currentTime = at; }, { once: true });
+      }
+      video.play().catch(() => {
+        video.controls = true;
+      });
+    };
+    if (play) play.addEventListener("click", () => start(video.ended ? 0 : NaN));
+    buttons.forEach((button, i) => button.addEventListener("click", () => start(starts[i])));
+    video.addEventListener("play", () => {
+      if (play) play.hidden = true;
+      video.controls = true;
+      if (!ticking) {
+        ticking = true;
+        raf(loop);
+      }
+    });
+    video.addEventListener("seeked", paint);
+    video.addEventListener("ended", () => {
+      if (play) play.hidden = false;
+      video.controls = false;
+      if (caption) caption.classList.remove("is-on");
+    });
   }
 
   /* The title assembles letter by letter. */
@@ -1079,6 +1274,8 @@ void main() {
   const boot = () => {
     initNav();
     splitTitle();
+    initViewers();
+    initFilm();
     initReveal();
     initPointer();
     initParallax();
