@@ -131,6 +131,23 @@ def test_english_interface_renders(page_warehouse: Path, name: str) -> None:
     assert not app.exception, [str(item.value) for item in app.exception]
 
 
+def test_language_survives_a_page_change(page_warehouse: Path) -> None:
+    picked = AppTest.from_string("from insightflow.pages import markets\nmarkets.render()\n", default_timeout=120).run()
+    picked.selectbox(key="insightflow_language").select("en").run()
+    assert picked.session_state["insightflow_saved_language"] == "en"
+    # Opening another page clears the picker's own state, as Streamlit does for widgets on a page,
+    # so the next page starts with only the saved choice.
+    script = (
+        "import streamlit as st\n"
+        "st.session_state.setdefault('insightflow_saved_language', 'en')\n"
+        "from insightflow.pages import sales\n"
+        "sales.render()\n"
+    )
+    opened = AppTest.from_string(script, default_timeout=120).run()
+    assert not opened.exception, [str(item.value) for item in opened.exception]
+    assert opened.selectbox(key="insightflow_language").value == "en"
+
+
 @pytest.mark.parametrize("name", ["overview", "markets", "sales", "customers", "products"])
 def test_empty_scope_explains_itself(
     page_warehouse: Path, name: str, monkeypatch: pytest.MonkeyPatch
