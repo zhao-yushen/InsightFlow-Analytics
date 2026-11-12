@@ -18,7 +18,16 @@ from .demo_data import write_demo_csv
 from .design import COLORS, GLOBAL_CSS, SEVERITY, STATUS, configure_plotly
 from .etl import SCHEMA_VERSION, clean_transactions, load_source
 from .geography import country_label, region_label
-from .i18n import LANGUAGES, base_period, current_language, language_name, t, tr
+from .i18n import (
+    LANGUAGE_KEY,
+    LANGUAGES,
+    SAVED_LANGUAGE_KEY,
+    base_period,
+    current_language,
+    language_name,
+    t,
+    tr,
+)
 from .metrics import (
     FilterSpec,
     available_filters,
@@ -294,8 +303,10 @@ def render_language_selector() -> str:
         codes,
         index=codes.index(current) if current in codes else 0,
         format_func=language_name,
-        key="insightflow_language",
+        key=LANGUAGE_KEY,
     )
+    # Streamlit clears a page's widget state when another page opens; a plain key carries the choice over.
+    st.session_state[SAVED_LANGUAGE_KEY] = language
     if language not in {"zh-CN", "en"}:
         st.sidebar.caption(
             "Beta: navigation is localized; analytical narratives use English fallback."

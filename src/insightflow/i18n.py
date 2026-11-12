@@ -500,8 +500,14 @@ LOCALES: dict[str, dict[str, str]] = {
 }
 
 
+LANGUAGE_KEY = "insightflow_language"
+SAVED_LANGUAGE_KEY = "insightflow_saved_language"
+
+
 def current_language() -> str:
-    value = str(st.session_state.get("insightflow_language", "zh-CN"))
+    # The picker's own state belongs to the page it sits on and is cleared when another page
+    # opens, so fall back to the choice saved under a plain key.
+    value = str(st.session_state.get(LANGUAGE_KEY) or st.session_state.get(SAVED_LANGUAGE_KEY) or "zh-CN")
     return value if value in LANGUAGES else "zh-CN"
 
 
